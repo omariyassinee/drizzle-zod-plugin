@@ -5,9 +5,8 @@ export const loadModule = async (id: string) => {
 	const server = await createServer({
 		plugins: [
 			drizzleZodVirtual({
-				schemaPath:
-					"/home/null/Space/Project/drizzle-zod-plugin/playground/tables.ts",
-				outputPath: "/home/null/Space/Project/drizzle-zod-plugin/validators.ts",
+				schemaPath: "./playground/tables.ts",
+				outputPath: "./validators.ts",
 			}),
 		],
 		server: { middlewareMode: true },
@@ -21,4 +20,3 @@ export const loadModule = async (id: string) => {
 		return null;
 	}
 };
-

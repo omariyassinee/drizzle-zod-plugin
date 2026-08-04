@@ -191,44 +191,41 @@ export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
 	const moduleId = options.moduleId ?? "virtual:drizzle-zod";
 	const resolvedId = RESOLVED_PREFIX + moduleId;
 
-	let cachedCode: string | null = null;
+	let viteRoot = process.cwd();
 
-	// Resolve once, relative to the project root (cwd), NOT relative to
-	// wherever Vite happens to bundle this plugin file at runtime
-	// (e.g. node_modules/.vite-temp/...), which was causing ERR_MODULE_NOT_FOUND.
-	const absoluteSchemaPath = isAbsolute(options.schemaPath)
-		? options.schemaPath
-		: resolvePath(process.cwd(), options.schemaPath);
+	function getResolvedPaths() {
+		const absoluteSchemaPath = isAbsolute(options.schemaPath)
+			? options.schemaPath
+			: resolvePath(viteRoot, options.schemaPath);
 
-	// Real file the generated Zod source is written to. Defaulted (not just
-	// optional) because a matching .d.ts shim needs it to exist in order to
-	// give the virtual module real, inferred TypeScript types.
-	const absoluteOutputPath = isAbsolute(options.outputPath ?? "")
-		? (options.outputPath as string)
-		: resolvePath(
-				process.cwd(),
-				options.outputPath ?? "./.drizzle-zod-generated/schemas.ts",
-			);
-	const dtsPath = resolvePath(
-		dirname(absoluteOutputPath),
-		"virtual-drizzle-zod.d.ts",
-	);
+		const absoluteOutputPath = isAbsolute(options.outputPath ?? "")
+			? (options.outputPath as string)
+			: resolvePath(
+					viteRoot,
+					options.outputPath ?? "./.drizzle-zod-generated/schemas.ts",
+				);
 
-	// Temp output location. Placed inside node_modules so that when we
-	// dynamic-import it, Node's normal bare-specifier resolution (walking up
-	// directories looking for node_modules) finds your real drizzle-orm, zod,
-	// etc. installs — those are marked external below, not bundled.
-	const tmpDir = joinPath(
-		process.cwd(),
-		"node_modules",
-		".drizzle-zod-virtual-tmp",
-	);
+		const dtsPath = resolvePath(
+			dirname(absoluteOutputPath),
+			"virtual-drizzle-zod.d.ts",
+		);
+
+		const tmpDir = joinPath(
+			viteRoot,
+			"node_modules",
+			".drizzle-zod-virtual-tmp",
+		);
+
+		return { absoluteSchemaPath, absoluteOutputPath, dtsPath, tmpDir };
+	}
 
 	async function generate(): Promise<{
 		code: string;
 		exportNames: string[];
 		tableCodes: Map<string, { code: string; exportNames: string[] }>;
 	}> {
+		const { absoluteSchemaPath, tmpDir } = getResolvedPaths();
+
 		// Dynamic import so drizzle-orm/drizzle-zod are only ever touched
 		// inside this Node-only plugin process, never bundled for the client.
 		const { createInsertSchema, createSelectSchema, createUpdateSchema } =
@@ -245,6 +242,7 @@ export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
 		// normally from node_modules after the fact.
 		const result = await esbuild.build({
 			entryPoints: [absoluteSchemaPath],
+			absWorkingDir: viteRoot,
 			bundle: true,
 			platform: "node",
 			format: "esm",
@@ -350,6 +348,7 @@ export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
 	} | null = null;
 
 	async function generateAndMaybeWrite() {
+		const { absoluteOutputPath, dtsPath } = getResolvedPaths();
 		const data = await generate();
 		cachedData = data;
 
@@ -409,7 +408,7 @@ export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
 
 		try {
 			const nodeTypesDir = joinPath(
-				process.cwd(),
+				viteRoot,
 				"node_modules",
 				"@types",
 				"virtual-drizzle-zod",
@@ -421,7 +420,7 @@ export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
 		}
 
 		console.log(
-			`[drizzle-zod-virtual] wrote ${absoluteOutputPath} + ${dtsPath} (cwd: ${process.cwd()})`,
+			`[drizzle-zod-virtual] wrote ${absoluteOutputPath} + ${dtsPath} (root: ${viteRoot})`,
 		);
 
 		return data;
@@ -430,6 +429,18 @@ export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
 	return {
 		name: "vite-plugin-drizzle-zod-virtual",
 		enforce: "pre",
+
+		configResolved(config) {
+			if (config.root) {
+				viteRoot = config.root;
+			}
+		},
+
+		async buildStart() {
+			if (!cachedData) {
+				await generateAndMaybeWrite();
+			}
+		},
 
 		resolveId(id) {
 			if (id === moduleId) return resolvedId;
@@ -459,6 +470,7 @@ export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
 
 		configureServer(server) {
 			// Regenerate + trigger HMR when the schema file changes in dev.
+			const { absoluteSchemaPath } = getResolvedPaths();
 			server.watcher.add(absoluteSchemaPath);
 			server.watcher.on("change", async (file) => {
 				if (resolvePath(file) === absoluteSchemaPath) {

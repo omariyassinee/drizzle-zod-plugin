@@ -1,4 +1,3 @@
-/// <reference path="./virtual.d.ts" />
 import { drizzleZodVirtual } from "./plugin";
 
 export { drizzleZodVirtual };
