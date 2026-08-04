@@ -407,6 +407,19 @@ export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
 
 		writeFileSync(dtsPath, dts);
 
+		try {
+			const nodeTypesDir = joinPath(
+				process.cwd(),
+				"node_modules",
+				"@types",
+				"virtual-drizzle-zod",
+			);
+			mkdirSync(nodeTypesDir, { recursive: true });
+			writeFileSync(joinPath(nodeTypesDir, "index.d.ts"), dts);
+		} catch {
+			// Ignore if node_modules/@types cannot be written to
+		}
+
 		console.log(
 			`[drizzle-zod-virtual] wrote ${absoluteOutputPath} + ${dtsPath} (cwd: ${process.cwd()})`,
 		);

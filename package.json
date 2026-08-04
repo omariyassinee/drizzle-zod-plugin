@@ -19,7 +19,7 @@
 		"README.md"
 	],
 	"scripts": {
-		"build": "tsup && tsc -p tsconfig.build.json",
+		"build": "tsup && tsc -p tsconfig.build.json && cp src/virtual.d.ts dist/virtual.d.ts && echo '/// <reference path=\"./virtual.d.ts\" />' | cat - dist/index.d.ts > dist/index.d.ts.tmp && mv dist/index.d.ts.tmp dist/index.d.ts",
 		"dev": "tsup --watch",
 		"typecheck": "tsc --noEmit",
 		"test": "bun test",
