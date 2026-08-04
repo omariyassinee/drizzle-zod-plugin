@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+out/
+*.tgz
+
+# plugin runtime generated files & test outputs
+.drizzle-zod-generated/
+validators.ts
+virtual-drizzle-zod.d.ts
+scratch_*.ts
+
+# code coverage & logs
+coverage/
+*.lcov
+logs/
+*.log
+
+# environment variable files
+.env
+.env.*
+!.env.example
+
+# caches & IDEs
+.cache/
+.eslintcache
+*.tsbuildinfo
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,61 @@
+{
+	"name": "drizzle-zod-plugin",
+	"version": "0.1.0",
+	"description": "Vite plugin to generate zero-overhead, virtual Zod validation schemas directly from Drizzle ORM tables.",
+	"license": "MIT",
+	"type": "module",
+	"main": "./dist/index.cjs",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"require": "./dist/index.cjs"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsup && tsc -p tsconfig.build.json",
+		"dev": "tsup --watch",
+		"typecheck": "tsc --noEmit",
+		"test": "bun test",
+		"prepublishOnly": "bun run build"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.14",
+		"drizzle-orm": "^1.0.0-rc.4",
+		"drizzle-zod": "^0.8.3",
+		"esbuild": "^0.28.1",
+		"tsup": "^8.5.1",
+		"typescript": "^5.0.0",
+		"vite": "^8.2.0",
+		"zod": "^4.4.3"
+	},
+	"peerDependencies": {
+		"drizzle-orm": "^0.30.0 || ^1.0.0-0",
+		"drizzle-zod": "^0.5.0 || ^0.6.0 || ^0.7.0 || ^0.8.0",
+		"esbuild": "^0.20.0 || ^0.21.0 || ^0.22.0 || ^0.23.0 || ^0.24.0 || ^0.25.0 || ^0.26.0 || ^0.27.0 || ^0.28.0",
+		"typescript": ">=5.0.0",
+		"vite": "^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0",
+		"zod": "^3.0.0 || ^4.0.0-0"
+	},
+	"peerDependenciesMeta": {
+		"esbuild": {
+			"optional": true
+		}
+	},
+	"keywords": [
+		"vite",
+		"vite-plugin",
+		"drizzle",
+		"drizzle-orm",
+		"drizzle-zod",
+		"zod",
+		"schema",
+		"virtual-module"
+	]
+}
