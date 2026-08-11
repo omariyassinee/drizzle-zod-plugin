@@ -34,11 +34,23 @@ export default defineConfig({
 });
 ```
 
-By default (`outputPath` omitted), all generated files stay **internal** — no files appear in your project tree. The virtual module is served in-memory, while TypeScript types are still emitted into `node_modules/@types/virtual-drizzle-zod/index.d.ts` so you get full autocomplete and inference. If you want visible schema files for inspection, simply provide `outputPath`.
+By default (`outputPath` omitted), generated schemas are served virtually in-memory — no clutter appears in your project tree. TypeScript types are emitted into `virtual-drizzle-zod.d.ts` in your project root so you get full autocomplete and inference. If you want visible schema files for inspection, simply provide `outputPath`.
 
-## 🚀 Usage
+## 🚀 Usage & Tree-Shaking
 
-### 1. Per-Table Sub-Module Imports (Recommended)
+### 1. Root Import (Automatic Tree-Shaking)
+
+The root virtual module acts as a barrel of static ES subpath re-exports with `/* @__PURE__ */` annotations. Unreferenced tables and unused schemas within tables are automatically tree-shaken away by Rollup, Esbuild, or Rolldown during production builds.
+
+```ts
+import { usersInsertSchema, postsSelectSchema } from 'virtual:drizzle-zod';
+
+const newUser = usersInsertSchema.parse(formData);
+```
+
+### 2. Per-Table Sub-Module Imports
+
+You can also import directly from per-table sub-modules for granular scoping:
 
 ```ts
 import { insertSchema, selectSchema, updateSchema } from 'virtual:drizzle-zod/users';
@@ -46,21 +58,17 @@ import { insertSchema, selectSchema, updateSchema } from 'virtual:drizzle-zod/us
 const newUser = insertSchema.parse(formData);
 ```
 
-### 2. Root Barrel Import
-
-```ts
-import { usersInsertSchema, postsInsertSchema } from 'virtual:drizzle-zod';
-```
-
 ## 🎛️ Plugin Options
 
 | Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `schemaPath` | `string` | *(Required)* | Path to your server Drizzle schema file |
+| `schemaPath` | `string` | *(Optional)* | Path to your server Drizzle schema file. Auto-detected from `drizzle.config.ts` if omitted. |
 | `tables` | `string[]` | *Auto-detected* | Table export names to include |
 | `moduleId` | `string` | `'virtual:drizzle-zod'` | Base virtual module specifier |
-| `outputPath` | `string` | *Internal* | Path to write generated files for inspection. Omitted by default — types remain purely internal. |
+| `outputPath` | `string` | *Internal* | Path to write generated files for inspection. Omitted by default — types remain internal. |
+| `splitByTable` | `boolean` | `true` | When `true`, generates individual per-table files plus a barrel `index.ts`. |
+| `noCache` | `boolean` | `false` | Disable in-memory result caching. |
 
 ## 📄 License
 
-MIT
+[MIT](./LICENSE) © [Yassine Omari](https://github.com/omariyassinee)
