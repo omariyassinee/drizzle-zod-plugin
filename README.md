@@ -1,4 +1,4 @@
-# drizzle-zod-plugin
+# @omariyassine/drizzle-zod-plugin
 
 Vite plugin to generate zero-overhead, virtual Zod validation schemas directly from Drizzle ORM tables at dev and build time.
 
@@ -11,9 +11,9 @@ Importing `drizzle-zod` or `drizzle-orm` in client-side code bloats JavaScript b
 ## 📦 Installation
 
 ```bash
-npm install -D drizzle-zod-plugin
+npm install -D @omariyassine/drizzle-zod-plugin
 # or
-bun add -d drizzle-zod-plugin
+bun add -d @omariyassine/drizzle-zod-plugin
 ```
 
 ## ⚙️ Quick Setup
@@ -22,7 +22,7 @@ Add the plugin to your `vite.config.ts`:
 
 ```ts
 import { defineConfig } from 'vite';
-import { drizzleZodVirtual } from 'drizzle-zod-plugin';
+import { drizzleZodVirtual } from '@omariyassine/drizzle-zod-plugin';
 
 export default defineConfig({
   plugins: [

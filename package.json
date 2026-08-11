@@ -1,5 +1,5 @@
 {
-	"name": "drizzle-zod-plugin",
+	"name": "@omariyassine/drizzle-zod-plugin",
 	"version": "0.1.0",
 	"description": "Vite plugin to generate zero-overhead, virtual Zod validation schemas directly from Drizzle ORM tables.",
 	"license": "MIT",
@@ -10,9 +10,11 @@
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
-			"import": "./dist/index.js",
-			"require": "./dist/index.cjs"
+			"import": "./dist/index.js"
 		}
+	},
+	"publishConfig": {
+		"access": "public"
 	},
 	"files": [
 		"dist",
@@ -23,9 +25,7 @@
 		"dev": "tsup --watch",
 		"typecheck": "tsc --noEmit",
 		"test": "bun test",
-		"bench": "bun run bench.ts",
-		"bench:compare": "bun run benchmark/index.ts",
-		"prepublishOnly": "bun run build"
+		"prepublishOnly": "npm run build"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.3.14",

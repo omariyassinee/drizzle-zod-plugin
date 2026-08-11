@@ -4,14 +4,14 @@ import { createServer } from "vite";
 import { drizzleZodVirtual } from "../src/plugin";
 
 test("resolves relative schemaPath relative to Vite config root", async () => {
-	const playgroundDir = path.resolve(process.cwd(), "playground");
+	const testsDir = path.resolve(process.cwd(), "tests");
 
 	const server = await createServer({
-		root: playgroundDir,
+		root: testsDir,
 		plugins: [
 			drizzleZodVirtual({
-				schemaPath: "./tables.ts", // relative to Vite root (playgroundDir)
-				outputPath: "./validators.ts",
+				schemaPath: "./fixtures/complex-schemas.ts", // relative to Vite root (testsDir)
+				outputPath: "./.drizzle-zod-generated/relative-test.ts",
 			}),
 		],
 		server: { middlewareMode: true },
@@ -24,7 +24,7 @@ test("resolves relative schemaPath relative to Vite config root", async () => {
 			any
 		>;
 		expect(mod).toBeDefined();
-		expect(mod.usersInsertSchema).toBeDefined();
+		expect(mod.pgComplexTableInsertSchema).toBeDefined();
 	} finally {
 		await server.close();
 	}

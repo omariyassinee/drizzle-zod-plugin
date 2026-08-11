@@ -1,47 +1,45 @@
 import { expect, test } from "bun:test";
 import { loadModule } from "../src/module";
 
-test("loads table-specific sub-module (virtual:drizzle-zod/users)", async () => {
-	const usersMod = (await loadModule("virtual:drizzle-zod/users")) as Record<
+test("loads table-specific sub-module (virtual:drizzle-zod/pgComplexTable)", async () => {
+	const pgMod = (await loadModule("virtual:drizzle-zod/pgComplexTable")) as Record<
 		string,
 		any
 	>;
 
-	expect(usersMod).toBeDefined();
+	expect(pgMod).toBeDefined();
 
 	// Generic short schema exports
-	expect(usersMod.insertSchema).toBeDefined();
-	expect(usersMod.selectSchema).toBeDefined();
-	expect(usersMod.updateSchema).toBeDefined();
+	expect(pgMod.insertSchema).toBeDefined();
+	expect(pgMod.selectSchema).toBeDefined();
+	expect(pgMod.updateSchema).toBeDefined();
 
 	// Make sure table-prefixed duplicate names are NOT exported in sub-modules
-	expect(usersMod.usersInsertSchema).toBeUndefined();
-	expect(usersMod.usersSelectSchema).toBeUndefined();
-	expect(usersMod.usersUpdateSchema).toBeUndefined();
+	expect(pgMod.pgComplexTableInsertSchema).toBeUndefined();
+	expect(pgMod.pgComplexTableSelectSchema).toBeUndefined();
+	expect(pgMod.pgComplexTableUpdateSchema).toBeUndefined();
 
 	// Validate functionality of generic short schemas
-	const validUser = usersMod.insertSchema.parse({
-		name: "Bob",
-		email: "bob@example.com",
+	const validPg = pgMod.insertSchema.parse({
+		tags: ["ts", "drizzle"],
+		role: "admin",
 	});
-	expect(validUser.name).toBe("Bob");
+	expect(validPg.role).toBe("admin");
 });
 
-test("loads table-specific sub-module (virtual:drizzle-zod/posts)", async () => {
-	const postsMod = (await loadModule("virtual:drizzle-zod/posts")) as Record<
+test("loads table-specific sub-module (virtual:drizzle-zod/mysqlComplexTable)", async () => {
+	const mysqlMod = (await loadModule("virtual:drizzle-zod/mysqlComplexTable")) as Record<
 		string,
 		any
 	>;
 
-	expect(postsMod).toBeDefined();
-	expect(postsMod.insertSchema).toBeDefined();
-	expect(postsMod.postsInsertSchema).toBeUndefined();
+	expect(mysqlMod).toBeDefined();
+	expect(mysqlMod.insertSchema).toBeDefined();
+	expect(mysqlMod.mysqlComplexTableInsertSchema).toBeUndefined();
 
-	const validPost = postsMod.insertSchema.parse({
-		authorId: "123e4567-e89b-12d3-a456-426614174000",
-		title: "Hello Virtual Submodules",
-		slug: "hello-virtual-submodules",
-		content: "Submodule imports work cleanly!",
+	const validMysql = mysqlMod.insertSchema.parse({
+		status: "active",
+		activeYear: 2026,
 	});
-	expect(validPost.title).toBe("Hello Virtual Submodules");
+	expect(validMysql.status).toBe("active");
 });

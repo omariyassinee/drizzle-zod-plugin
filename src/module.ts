@@ -5,7 +5,7 @@ export const loadModule = async (id: string) => {
 	const server = await createServer({
 		plugins: [
 			drizzleZodVirtual({
-				schemaPath: "./playground/tables.ts",
+				schemaPath: "./tests/fixtures/complex-schemas.ts",
 				outputPath: "./validators.ts",
 			}),
 		],

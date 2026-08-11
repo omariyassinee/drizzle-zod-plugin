@@ -77,7 +77,7 @@ export function zodTypeToCode(
 		const cached = cache.get(schema);
 		if (cached !== undefined) return cached;
 	}
-	const result = "/* @__PURE__ */ " + _zodTypeToCode(schema, cache, depth);
+	const result = _zodTypeToCode(schema, cache, depth);
 	if (cache) cache.set(schema, result);
 	return result;
 }
