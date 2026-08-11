@@ -25,403 +25,89 @@
 // That module contains only `z.object(...)` calls — safe to import from
 // client components, forms, React Hook Form resolvers, etc.
 
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import {
-	dirname,
-	isAbsolute,
-	join as joinPath,
-	relative,
-	resolve as resolvePath,
-} from "node:path";
-import { pathToFileURL } from "node:url";
-import * as esbuild from "esbuild";
+import { resolve as resolvePath } from "node:path";
 import type { Plugin } from "vite";
-import type { ZodTypeAny } from "zod";
+import { RESOLVED_PREFIX } from "./constants";
+import { resolveSchemaPath } from "./drizzle-config";
+import { writeGeneratedFiles } from "./file-writer";
+import { getResolvedPaths } from "./paths";
+import { generateSchemas } from "./schema-generator";
+import type { DrizzleZodVirtualOptions, GeneratedData } from "./types";
 
-export interface DrizzleZodVirtualOptions {
-	/** Path to the file exporting your Drizzle tables (server-only file). */
-	schemaPath: string;
-	/**
-	 * Names of the exported table objects to generate schemas for.
-	 * Omit to auto-detect every exported Drizzle table in schemaPath.
-	 */
-	tables?: string[];
-	/** Virtual module id clients will import from. Defaults to 'virtual:drizzle-zod'. */
-	moduleId?: string;
-	/**
-	 * Also write the generated Zod source to a real file on disk (relative to
-	 * project root) — used both so you can inspect/diff it, AND so a matching
-	 * .d.ts shim can give the virtual module real, fully-inferred TypeScript
-	 * types instead of `any`. Defaults to './.drizzle-zod-generated/schemas.ts'.
-	 */
-	outputPath?: string;
-}
-
-const RESOLVED_PREFIX = "\0";
-
-// --- Zod 4 -> source-code serializer ---------------------------------------
-// Built against Zod 4's ACTUAL internal shape (verified against zod@4.4.3):
-//   - discriminator is `def.type` (a plain string: 'string', 'object', 'optional'...)
-//     NOT `def.typeName` (that was Zod 3's convention, e.g. 'ZodString')
-//   - object fields live at `def.shape` directly (a plain object), not `def.shape()`
-//   - enum values live at `def.entries` (an object map), not `def.values` (an array)
-//   - wrapper types (optional/nullable/default) nest via `def.innerType`
-// Extend the switch below as you use more Zod types (arrays, unions, records...).
-function zodTypeToCode(schema: ZodTypeAny): string {
-	const def = (schema as any)._def ?? (schema as any).def;
-
-	if (!def || typeof def.type !== "string") {
-		throw new Error(
-			`[drizzle-zod-virtual] Could not read a valid def.type from schema. ` +
-				`Got: ${JSON.stringify(def)}`,
-		);
-	}
-
-	switch (def.type) {
-		case "string": {
-			let format = def.format;
-			if (!format && Array.isArray(def.checks)) {
-				for (const check of def.checks) {
-					if (check?.format) {
-						format = check.format;
-						break;
-					}
-					if (check?.def?.format) {
-						format = check.def.format;
-						break;
-					}
-				}
-			}
-			const knownFormats = [
-				"uuid",
-				"email",
-				"url",
-				"cuid",
-				"cuid2",
-				"ulid",
-				"emoji",
-				"ipv4",
-				"ipv6",
-			];
-			if (format && knownFormats.includes(format)) {
-				return def.coerce ? `z.coerce.string().${format}()` : `z.${format}()`;
-			}
-			return def.coerce ? "z.coerce.string()" : "z.string()";
-		}
-		case "number":
-			return def.coerce ? "z.coerce.number()" : "z.number()";
-		case "boolean":
-			return def.coerce ? "z.coerce.boolean()" : "z.boolean()";
-		case "date":
-			return def.coerce ? "z.coerce.date()" : "z.date()";
-		case "bigint":
-			return def.coerce ? "z.coerce.bigint()" : "z.bigint()";
-		case "any":
-			return "z.any()";
-		case "unknown":
-			return "z.unknown()";
-		case "custom":
-			return "z.custom()";
-		case "literal": {
-			const val = def.values ? def.values[0] : def.value;
-			return `z.literal(${JSON.stringify(val)})`;
-		}
-		case "tuple": {
-			const items = def.items ?? (def.element ? [def.element] : []);
-			return `z.tuple([${(items as ZodTypeAny[]).map(zodTypeToCode).join(", ")}])`;
-		}
-		case "intersection":
-			return `z.intersection(${zodTypeToCode(def.left)}, ${zodTypeToCode(def.right)})`;
-		case "record":
-			return `z.record(${zodTypeToCode(def.keyType)}, ${zodTypeToCode(def.valueType)})`;
-		case "set":
-			return `z.set(${zodTypeToCode(def.valueType)})`;
-		case "map":
-			return `z.map(${zodTypeToCode(def.keyType)}, ${zodTypeToCode(def.valueType)})`;
-		case "nan":
-			return "z.nan()";
-		case "never":
-			return "z.never()";
-		case "undefined":
-			return "z.undefined()";
-		case "void":
-			return "z.void()";
-		case "null":
-			return "z.null()";
-		case "union":
-			return `z.union([${(def.options as ZodTypeAny[]).map(zodTypeToCode).join(", ")}])`;
-		case "enum": {
-			const entries = def.entries
-				? Object.keys(def.entries)
-				: Array.isArray(def.values)
-				? def.values
-				: [];
-			return `z.enum(${JSON.stringify(entries)})`;
-		}
-		case "optional":
-			return `${zodTypeToCode(def.innerType)}.optional()`;
-		case "nullable":
-			return `${zodTypeToCode(def.innerType)}.nullable()`;
-		case "default": {
-			const defaultVal = typeof def.defaultValue === "function" ? def.defaultValue() : def.defaultValue;
-			return `${zodTypeToCode(def.innerType)}.default(${JSON.stringify(defaultVal)})`;
-		}
-		case "array":
-			return `z.array(${zodTypeToCode(def.element)})`;
-		case "object": {
-			const shape = def.shape;
-			const fields = Object.entries(shape)
-				.map(
-					([key, val]) =>
-						`  ${JSON.stringify(key)}: ${zodTypeToCode(val as ZodTypeAny)},`,
-				)
-				.join("\n");
-			return `z.object({\n${fields}\n})`;
-		}
-		default:
-			// Keep the build from silently emitting wrong/incomplete validation.
-			throw new Error(
-				`[drizzle-zod-virtual] Unsupported Zod type "${def.type}". ` +
-					`Add a case in zodTypeToCode() for it.`,
-			);
-	}
-}
+export type { DrizzleZodVirtualOptions } from "./types";
 
 export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
 	const moduleId = options.moduleId ?? "virtual:drizzle-zod";
 	const resolvedId = RESOLVED_PREFIX + moduleId;
+	const splitByTable = options.splitByTable ?? true;
+
+	const noCache = options.noCache ?? false;
 
 	let viteRoot = process.cwd();
+	const watchedDeps = new Set<string>();
 
-	function getResolvedPaths() {
-		const absoluteSchemaPath = isAbsolute(options.schemaPath)
-			? options.schemaPath
-			: resolvePath(viteRoot, options.schemaPath);
+	// Resolved once (lazily) — either from options.schemaPath or drizzle config
+	let resolvedSchemaPath: string | undefined;
 
-		const absoluteOutputPath = isAbsolute(options.outputPath ?? "")
-			? (options.outputPath as string)
-			: resolvePath(
-					viteRoot,
-					options.outputPath ?? "./.drizzle-zod-generated/schemas.ts",
-				);
-
-		const dtsPath = resolvePath(
-			dirname(absoluteOutputPath),
-			"virtual-drizzle-zod.d.ts",
-		);
-
-		const tmpDir = joinPath(
-			viteRoot,
-			"node_modules",
-			".drizzle-zod-virtual-tmp",
-		);
-
-		return { absoluteSchemaPath, absoluteOutputPath, dtsPath, tmpDir };
-	}
-
-	async function generate(): Promise<{
-		code: string;
-		exportNames: string[];
-		tableCodes: Map<string, { code: string; exportNames: string[] }>;
-	}> {
-		const { absoluteSchemaPath, tmpDir } = getResolvedPaths();
-
-		// Dynamic import so drizzle-orm/drizzle-zod are only ever touched
-		// inside this Node-only plugin process, never bundled for the client.
-		const { createInsertSchema, createSelectSchema, createUpdateSchema } =
-			await import("drizzle-orm/zod");
-		const { is, Table } = await import("drizzle-orm");
-
-		// Bundle ONLY the schema file's local/aliased imports with esbuild.
-		// esbuild auto-detects tsconfig.json and natively resolves
-		// "compilerOptions.paths" aliases (e.g. "@/database/..."), which is
-		// exactly what raw Node import() and Vite's ssrLoadModule both failed
-		// to do in this project's setup (non-runnable ssr environment).
-		// `packages: 'external'` keeps real node_modules deps (drizzle-orm, etc.)
-		// as plain imports instead of inlining them, so Node resolves them
-		// normally from node_modules after the fact.
-		const result = await esbuild.build({
-			entryPoints: [absoluteSchemaPath],
-			absWorkingDir: viteRoot,
-			bundle: true,
-			platform: "node",
-			format: "esm",
-			packages: "external",
-			write: false,
-			logLevel: "silent",
-		});
-
-		const bundledCode = result.outputFiles[0]?.text;
-		if (!bundledCode) {
-			throw new Error("[drizzle-zod-virtual] Failed to bundle schema file");
-		}
-
-		mkdirSync(tmpDir, { recursive: true });
-		const tmpFile = joinPath(tmpDir, `schema-${Date.now()}.mjs`);
-		writeFileSync(tmpFile, bundledCode);
-
-		let schemaModule: any;
-		try {
-			schemaModule = await import(pathToFileURL(tmpFile).href);
-		} finally {
-			rmSync(tmpFile, { force: true });
-		}
-
-		const chunks: string[] = [
-			"// AUTO-GENERATED by vite-plugin-drizzle-zod-virtual. Do not edit.",
-			"import * as z from 'zod'",
-			"",
-		];
-
-		// Auto-detect: if no explicit table list, keep every export that is
-		// actually a Drizzle Table instance (skips enums, helper fns, etc.
-		// that a schema barrel file might also export).
-		const tableNames =
-			options.tables ??
-			Object.entries(schemaModule)
-				.filter(([, value]) => is(value, Table))
-				.map(([key]) => key);
-
-		if (tableNames.length === 0) {
-			throw new Error(
-				`[drizzle-zod-virtual] No Drizzle tables found in ${absoluteSchemaPath}. ` +
-					`Either export some pgTable(...) values from it, or pass an explicit "tables" option.`,
-			);
-		}
-
-		const exportNames: string[] = [];
-		const tableCodes = new Map<
-			string,
-			{ code: string; exportNames: string[] }
-		>();
-
-		for (const tableName of tableNames) {
-			const table = schemaModule[tableName];
-			if (!table) {
-				throw new Error(
-					`[drizzle-zod-virtual] Table "${tableName}" not exported from ${options.schemaPath}`,
-				);
-			}
-
-			const insertSchema = createInsertSchema(table);
-			const selectSchema = createSelectSchema(table);
-			const updateSchema = createUpdateSchema(table);
-
-			const names = [
-				`${tableName}InsertSchema`,
-				`${tableName}SelectSchema`,
-				`${tableName}UpdateSchema`,
-			];
-			exportNames.push(...names);
-
-			const insertCode = zodTypeToCode(insertSchema);
-			const selectCode = zodTypeToCode(selectSchema);
-			const updateCode = zodTypeToCode(updateSchema);
-
-			chunks.push(`export const ${names[0]} = ${insertCode}`);
-			chunks.push(`export const ${names[1]} = ${selectCode}`);
-			chunks.push(`export const ${names[2]} = ${updateCode}`);
-			chunks.push("");
-
-			const subModuleChunks = [
-				"// AUTO-GENERATED by vite-plugin-drizzle-zod-virtual. Do not edit.",
-				"import * as z from 'zod'",
-				"",
-				`export const insertSchema = ${insertCode}`,
-				`export const selectSchema = ${selectCode}`,
-				`export const updateSchema = ${updateCode}`,
-			];
-
-			tableCodes.set(tableName, {
-				code: subModuleChunks.join("\n"),
-				exportNames: names,
+	async function ensureSchemaPath(): Promise<string> {
+		if (!resolvedSchemaPath) {
+			resolvedSchemaPath = await resolveSchemaPath({
+				schemaPath: options.schemaPath,
+				projectRoot: viteRoot,
 			});
 		}
-
-		return { code: chunks.join("\n"), exportNames, tableCodes };
+		return resolvedSchemaPath;
 	}
 
-	let cachedData: {
-		code: string;
-		exportNames: string[];
-		tableCodes: Map<string, { code: string; exportNames: string[] }>;
-	} | null = null;
+	let cachedData: GeneratedData | null = null;
 
-	async function generateAndMaybeWrite() {
-		const { absoluteOutputPath, dtsPath } = getResolvedPaths();
-		const data = await generate();
+	let pendingGeneration: Promise<GeneratedData> | null = null;
+
+	async function generateAndMaybeWrite(
+		forceRegen = false,
+	): Promise<GeneratedData> {
+		// Hard regeneration: wipe cachedData
+		if (forceRegen || noCache) {
+			cachedData = null;
+			// Wait for any in-flight generation to complete before starting fresh,
+			// so we don't have two concurrent builds.
+			if (pendingGeneration) await pendingGeneration.catch(() => {});
+		}
+
+		// Deduplication layer (unconditional)
+		if (pendingGeneration) return pendingGeneration;
+
+		// Soft cache hit (only when caching is on)
+		if (!noCache && cachedData) return cachedData;
+
+		pendingGeneration = _generateAndMaybeWrite().finally(() => {
+			pendingGeneration = null;
+		});
+
+		return pendingGeneration;
+	}
+
+	async function _generateAndMaybeWrite(): Promise<GeneratedData> {
+		const schemaPath = await ensureSchemaPath();
+		const paths = getResolvedPaths(schemaPath, options, viteRoot, splitByTable);
+		const data = await generateSchemas({
+			absoluteSchemaPath: paths.absoluteSchemaPath,
+			schemaPath,
+			tmpDir: paths.tmpDir,
+			viteRoot,
+			tables: options.tables,
+			moduleId,
+		});
 		cachedData = data;
 
-		mkdirSync(dirname(absoluteOutputPath), { recursive: true });
-		writeFileSync(absoluteOutputPath, data.code);
-
-		// Compute a relative import path from the .d.ts location to the real
-		// schema file, POSIX-style and without extension (TS module specifier
-		// conventions), e.g. "./schemas".
-		let relImport = relative(dirname(dtsPath), absoluteOutputPath)
-			.replace(/\\/g, "/")
-			.replace(/\.ts$/, "");
-		if (!relImport.startsWith(".")) relImport = `./${relImport}`;
-
-		// IMPORTANT: neither `export * from '...'` NOR a static `import {x as
-		// _x} from '...'; export const x: typeof _x` inside a `declare module
-		// 'bare-specifier' { ... }` block preserves the real type here — both
-		// were verified (via isolated tsc repros) to silently degrade to `any`
-		// even though the member "exists" with no compile error. The pattern
-		// that actually works is the `import()` TYPE QUERY form below — a
-		// genuinely different TS mechanism (no static import binding at all).
-		const rootExportLines = data.exportNames
-			.map(
-				(name) =>
-					`export const ${name}: (typeof import('${relImport}'))['${name}']`,
-			)
-			.join("\n  ");
-
-		const subModuleDeclarations: string[] = [];
-		for (const tableName of data.tableCodes.keys()) {
-			const insertName = `${tableName}InsertSchema`;
-			const selectName = `${tableName}SelectSchema`;
-			const updateName = `${tableName}UpdateSchema`;
-
-			const aliasLines = [
-				`export const insertSchema: (typeof import('${relImport}'))['${insertName}']`,
-				`export const selectSchema: (typeof import('${relImport}'))['${selectName}']`,
-				`export const updateSchema: (typeof import('${relImport}'))['${updateName}']`,
-			].join("\n  ");
-
-			subModuleDeclarations.push(
-				`declare module '${moduleId}/${tableName}' {\n  ${aliasLines}\n}`,
-			);
-		}
-
-		const dts =
-			`// AUTO-GENERATED by vite-plugin-drizzle-zod-virtual. Do not edit.\n` +
-			`// Gives '${moduleId}' real, fully-inferred TypeScript types via the\n` +
-			`// "(typeof import('...'))['x']" type-query form.\n` +
-			`declare module '${moduleId}' {\n` +
-			`  ${rootExportLines}\n` +
-			`}\n\n` +
-			subModuleDeclarations.join("\n\n") +
-			"\n";
-
-		writeFileSync(dtsPath, dts);
-
-		try {
-			const nodeTypesDir = joinPath(
-				viteRoot,
-				"node_modules",
-				"@types",
-				"virtual-drizzle-zod",
-			);
-			mkdirSync(nodeTypesDir, { recursive: true });
-			writeFileSync(joinPath(nodeTypesDir, "index.d.ts"), dts);
-		} catch {
-			// Ignore if node_modules/@types cannot be written to
-		}
-
-		console.log(
-			`[drizzle-zod-virtual] wrote ${absoluteOutputPath} + ${dtsPath} (root: ${viteRoot})`,
-		);
+		await writeGeneratedFiles({
+			paths,
+			options,
+			viteRoot,
+			splitByTable,
+			moduleId,
+			data,
+		});
 
 		return data;
 	}
@@ -433,13 +119,13 @@ export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
 		configResolved(config) {
 			if (config.root) {
 				viteRoot = config.root;
+				// Reset resolved schema path since viteRoot changed
+				resolvedSchemaPath = undefined;
 			}
 		},
 
 		async buildStart() {
-			if (!cachedData) {
-				await generateAndMaybeWrite();
-			}
+			await generateAndMaybeWrite();
 		},
 
 		resolveId(id) {
@@ -449,9 +135,7 @@ export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
 
 		async load(id) {
 			if (!id.startsWith(RESOLVED_PREFIX + moduleId)) return;
-			if (!cachedData) {
-				await generateAndMaybeWrite();
-			}
+			await generateAndMaybeWrite();
 
 			if (id === resolvedId) {
 				return cachedData?.code;
@@ -468,28 +152,62 @@ export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
 			);
 		},
 
-		configureServer(server) {
-			// Regenerate + trigger HMR when the schema file changes in dev.
-			const { absoluteSchemaPath } = getResolvedPaths();
-			server.watcher.add(absoluteSchemaPath);
-			server.watcher.on("change", async (file) => {
-				if (resolvePath(file) === absoluteSchemaPath) {
-					await generateAndMaybeWrite();
-					const mod = server.moduleGraph.getModuleById(resolvedId);
-					if (mod) {
-						server.moduleGraph.invalidateModule(mod);
+		async configureServer(server) {
+			const schemaPath = await ensureSchemaPath();
+			const { absoluteSchemaPath } = getResolvedPaths(
+				schemaPath,
+				options,
+				viteRoot,
+				splitByTable,
+			);
+
+			const warmUp = async () => {
+				const data = await generateAndMaybeWrite();
+				if (!data) return;
+				for (const p of data.depPaths) {
+					if (!watchedDeps.has(p)) {
+						watchedDeps.add(p);
+						server.watcher.add(p);
 					}
-					if (cachedData) {
-						for (const tableName of cachedData.tableCodes.keys()) {
-							const subMod = server.moduleGraph.getModuleById(
-								`${RESOLVED_PREFIX}${moduleId}/${tableName}`,
-							);
-							if (subMod) {
-								server.moduleGraph.invalidateModule(subMod);
+				}
+			};
+			warmUp().catch(() => {});
+
+			let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+			server.watcher.on("change", (file) => {
+				const resolvedFile = resolvePath(file);
+				if (
+					resolvedFile === absoluteSchemaPath ||
+					watchedDeps.has(resolvedFile)
+				) {
+					if (debounceTimer) clearTimeout(debounceTimer);
+					debounceTimer = setTimeout(async () => {
+						debounceTimer = undefined;
+						const data = await generateAndMaybeWrite(true);
+						if (!data) return;
+						for (const p of data.depPaths) {
+							if (!watchedDeps.has(p)) {
+								watchedDeps.add(p);
+								server.watcher.add(p);
 							}
 						}
-					}
-					server.ws.send({ type: "full-reload" });
+						const mod = server.moduleGraph.getModuleById(resolvedId);
+						if (mod) {
+							server.moduleGraph.invalidateModule(mod);
+						}
+						if (cachedData) {
+							for (const tableName of cachedData.tableCodes.keys()) {
+								const subMod = server.moduleGraph.getModuleById(
+									`${RESOLVED_PREFIX}${moduleId}/${tableName}`,
+								);
+								if (subMod) {
+									server.moduleGraph.invalidateModule(subMod);
+								}
+							}
+						}
+						server.ws.send({ type: "full-reload" });
+					}, 150);
 				}
 			});
 		},

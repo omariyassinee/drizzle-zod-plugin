@@ -7,7 +7,7 @@ export default defineConfig({
 	clean: true,
 	sourcemap: false,
 	minify: true,
-	splitting: false,
+	splitting: true,
 	external: [
 		"vite",
 		"esbuild",
@@ -17,5 +17,6 @@ export default defineConfig({
 		"node:fs",
 		"node:path",
 		"node:url",
+		"node:fs/promises",
 	],
 });

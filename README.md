@@ -28,10 +28,13 @@ export default defineConfig({
   plugins: [
     drizzleZodVirtual({
       schemaPath: './src/db/schema.ts',
+      // outputPath: './zod-schemas/generated.ts' // optional
     }),
   ],
 });
 ```
+
+By default (`outputPath` omitted), all generated files stay **internal** — no files appear in your project tree. The virtual module is served in-memory, while TypeScript types are still emitted into `node_modules/@types/virtual-drizzle-zod/index.d.ts` so you get full autocomplete and inference. If you want visible schema files for inspection, simply provide `outputPath`.
 
 ## 🚀 Usage
 
@@ -56,7 +59,7 @@ import { usersInsertSchema, postsInsertSchema } from 'virtual:drizzle-zod';
 | `schemaPath` | `string` | *(Required)* | Path to your server Drizzle schema file |
 | `tables` | `string[]` | *Auto-detected* | Table export names to include |
 | `moduleId` | `string` | `'virtual:drizzle-zod'` | Base virtual module specifier |
-| `outputPath` | `string` | `'./.drizzle-zod-generated/schemas.ts'` | Output disk path for TypeScript type inference shims |
+| `outputPath` | `string` | *Internal* | Path to write generated files for inspection. Omitted by default — types remain purely internal. |
 
 ## 📄 License
 

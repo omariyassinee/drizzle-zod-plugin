@@ -26,5 +26,7 @@
 		"noUnusedLocals": false,
 		"noUnusedParameters": false,
 		"noPropertyAccessFromIndexSignature": false
-	}
+	},
+	"include": ["src/**/*", "tests/**/*"],
+	"exclude": ["validators", "playground", ".drizzle-zod-generated", "dist", "node_modules"]
 }

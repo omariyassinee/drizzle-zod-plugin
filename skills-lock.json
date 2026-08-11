@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "zod": {
+      "source": "anivar/zod-skill",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "8f746325460dba852bd07b63d3afd74af86fcf267def6dc509694882a58d91ee"
+    }
+  }
+}

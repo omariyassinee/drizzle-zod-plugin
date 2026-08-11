@@ -4,7 +4,7 @@
 	"description": "Vite plugin to generate zero-overhead, virtual Zod validation schemas directly from Drizzle ORM tables.",
 	"license": "MIT",
 	"type": "module",
-	"main": "./dist/index.cjs",
+	"main": "./dist/index.js",
 	"module": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"exports": {
@@ -19,10 +19,12 @@
 		"README.md"
 	],
 	"scripts": {
-		"build": "tsup && tsc -p tsconfig.build.json && cp src/virtual.d.ts dist/virtual.d.ts && echo '/// <reference path=\"./virtual.d.ts\" />' | cat - dist/index.d.ts > dist/index.d.ts.tmp && mv dist/index.d.ts.tmp dist/index.d.ts",
+		"build": "tsup && tsc -p tsconfig.build.json",
 		"dev": "tsup --watch",
 		"typecheck": "tsc --noEmit",
 		"test": "bun test",
+		"bench": "bun run bench.ts",
+		"bench:compare": "bun run benchmark/index.ts",
 		"prepublishOnly": "bun run build"
 	},
 	"devDependencies": {
