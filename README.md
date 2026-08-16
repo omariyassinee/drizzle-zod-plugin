@@ -58,6 +58,34 @@ import { insertSchema, selectSchema, updateSchema } from 'virtual:drizzle-zod/us
 const newUser = insertSchema.parse(formData);
 ```
 
+## 🛠️ Schema Refinement (`refineSchema`)
+
+Drizzle-generated schemas reflect raw database column constraints. When building forms, UI inputs, or API boundaries, you often need **custom error messages**, **additional validation rules**, or **type extensions** without losing type safety or untouched fields.
+
+The `refineSchema` helper lets you customize individual fields cleanly:
+
+```ts
+import { insertSchema as baseInsertSchema } from "virtual:drizzle-zod/usersTable";
+import { refineSchema } from "@omariyassine/drizzle-zod-plugin";
+
+export const insertUserSchema = refineSchema(baseInsertSchema, (fields) => ({
+  // 1. Override error messages on pre-existing checks (no duplicate validation chains)
+  email: fields.email.setError("Please provide a valid email address"),
+
+  // 2. Add extra validations (e.g., min age, regex, etc.)
+  age: fields.age.min(18, { error: "You must be at least 18 years old to register" }),
+
+  // 3. Extend unions, enums, or transformations
+  role: fields.role.or(z.literal("superadmin")),
+}));
+```
+
+### Key Capabilities
+
+- **`setError(message)` / `withError(message)`**: Overrides the error message on existing field checks without adding redundant rules.
+- **Transparent Optional & Nullable Handling**: You can call methods like `.min()`, `.max()`, or `.setError()` directly on optional or nullable fields without manually unwrapping and re-wrapping `.optional()` / `.nullable()`.
+- **Full TypeScript Type Safety**: Preserves the exact inferred types of all untouched fields while accurately typing modified fields.
+
 ## 🎛️ Plugin Options
 
 | Option | Type | Default | Description |
