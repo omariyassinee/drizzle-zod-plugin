@@ -108,3 +108,44 @@ test("refineSchema transparently handles optional and nullable fields", () => {
 		);
 	}
 });
+
+test("refineSchema allows extending the schema with completely new fields", () => {
+	const userSchema = z.object({
+		id: z.number(),
+		email: z.string(),
+	});
+
+	const extendedSchema = refineSchema(userSchema, (fields) => ({
+		email: fields.email.setError("Invalid email address"),
+		// New fields:
+		confirmPassword: z.string().min(8, { error: "Password must be at least 8 chars" }),
+		agreedToTerms: z.boolean(),
+	}));
+
+	// 1. Valid payload with original and new fields
+	const valid = extendedSchema.safeParse({
+		id: 1,
+		email: "user@example.com",
+		confirmPassword: "password123",
+		agreedToTerms: true,
+	});
+	expect(valid.success).toBe(true);
+
+	// 2. Missing new field fails
+	const missingNewField = extendedSchema.safeParse({
+		id: 1,
+		email: "user@example.com",
+	});
+	expect(missingNewField.success).toBe(false);
+
+	// 3. Inferred type check
+	type ExtendedType = z.infer<typeof extendedSchema>;
+	const sample: ExtendedType = {
+		id: 10,
+		email: "alex@example.com",
+		confirmPassword: "securepassword",
+		agreedToTerms: true,
+	};
+	expect(sample.confirmPassword).toBe("securepassword");
+});
+

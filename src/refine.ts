@@ -120,6 +120,13 @@ export type RefinableShape<T extends Record<string, z.ZodTypeAny>> = {
 	[K in keyof T]: RefinedField<DeepUnwrap<T[K]>>;
 };
 
+export type RefinementCallbackResult<
+	TShape extends Record<string, z.ZodTypeAny>,
+> = {
+	[K in keyof TShape]?: z.ZodTypeAny;
+} & {
+	[key: string]: z.ZodTypeAny | undefined;
+};
 
 /**
  * Wraps a field schema in a Proxy that automatically delegates inner type methods
@@ -185,7 +192,7 @@ function wrapFieldProxy(field: z.ZodTypeAny): any {
  */
 export function refineSchema<
 	T extends z.ZodObject<any>,
-	R extends Record<string, z.ZodTypeAny>,
+	R extends RefinementCallbackResult<T["shape"]>,
 >(
 	baseSchema: T,
 	refinementFn: (fields: RefinableShape<T["shape"]>) => R,
@@ -201,4 +208,5 @@ export function refineSchema<
 		...modifiedFields,
 	}) as any;
 }
+
 

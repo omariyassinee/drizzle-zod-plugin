@@ -6,7 +6,7 @@ import { writeGeneratedFiles } from "./file-writer";
 import { getResolvedPaths } from "./paths";
 import { generateSchemas } from "./schema-generator";
 
-const VERSION = "0.1.311";
+const VERSION = "0.1.4";
 
 const HELP_TEXT = `
 vdz - CLI for Drizzle Zod Virtual Plugin
