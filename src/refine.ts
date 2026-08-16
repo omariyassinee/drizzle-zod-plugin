@@ -196,7 +196,11 @@ export function refineSchema<
 >(
 	baseSchema: T,
 	refinementFn: (fields: RefinableShape<T["shape"]>) => R,
-): z.ZodObject<Omit<T["shape"], keyof R> & R> {
+): z.ZodObject<
+	Omit<T["shape"], keyof R> & {
+		[K in keyof R]: K extends keyof T["shape"] ? T["shape"][K] : R[K];
+	}
+> {
 	const proxiedShape: Record<string, any> = {};
 	for (const [key, field] of Object.entries(baseSchema.shape)) {
 		proxiedShape[key] = wrapFieldProxy(field as z.ZodTypeAny);
@@ -208,5 +212,6 @@ export function refineSchema<
 		...modifiedFields,
 	}) as any;
 }
+
 
 

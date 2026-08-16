@@ -149,3 +149,38 @@ test("refineSchema allows extending the schema with completely new fields", () =
 	expect(sample.confirmPassword).toBe("securepassword");
 });
 
+test("refineSchema preserves optional and nullable TypeScript inference when checks are applied", () => {
+	const serviceSchema = z.object({
+		id: z.string(),
+		name: z.string(),
+		description: z.string().max(300).optional(),
+		bio: z.string().nullable(),
+		isActive: z.boolean().optional(),
+	});
+
+	const refined = refineSchema(serviceSchema, (fields) => ({
+		id: fields.id.setError("Invalid ID"),
+		name: fields.name.min(3).max(50),
+		description: fields.description.max(300, { error: "Description max 300" }),
+		bio: fields.bio.setError("Invalid bio"),
+		confirmPassword: z.string().min(8),
+	}));
+
+	type Inferred = z.infer<typeof refined>;
+
+	// Check that description is optional in TypeScript
+	const payload: Inferred = {
+		id: "svc_1",
+		name: "Dental Cleaning",
+		// description omitted (optional)
+		bio: null, // nullable
+		confirmPassword: "password123",
+	};
+
+	expect(payload.description).toBeUndefined();
+
+	const parseResult = refined.safeParse(payload);
+	expect(parseResult.success).toBe(true);
+});
+
+
