@@ -1,5 +1,78 @@
 import { z } from "zod";
 
+type WrapperDef = {
+	type: "optional" | "nullable" | "exactOptional" | "default";
+	defaultValue?: any;
+};
+
+/**
+ * Extracts all outer wrapper layers (optional, nullable, exactOptional, default)
+ * into an ordered stack and returns the innermost core schema.
+ */
+function unwrapAll(field: z.ZodTypeAny): {
+	core: z.ZodTypeAny;
+	wrappers: WrapperDef[];
+} {
+	const wrappers: WrapperDef[] = [];
+	let current: any = field;
+
+	while (current) {
+		const def = current._def ?? current.def;
+		if (!def) break;
+
+		if (def.type === "optional") {
+			wrappers.push({ type: "optional" });
+			current = def.innerType;
+		} else if (def.type === "nullable") {
+			wrappers.push({ type: "nullable" });
+			current = def.innerType;
+		} else if (def.type === "exactOptional") {
+			wrappers.push({ type: "exactOptional" });
+			current = def.innerType;
+		} else if (def.type === "default") {
+			const defaultVal =
+				typeof def.defaultValue === "function"
+					? def.defaultValue()
+					: def.defaultValue;
+			wrappers.push({ type: "default", defaultValue: defaultVal });
+			current = def.innerType;
+		} else {
+			break;
+		}
+	}
+
+	return { core: current, wrappers };
+}
+
+/**
+ * Re-applies extracted wrapper layers in reverse order (innermost to outermost).
+ */
+function applyWrappers(
+	core: z.ZodTypeAny,
+	wrappers: WrapperDef[],
+): z.ZodTypeAny {
+	let current: any = core;
+	for (let i = wrappers.length - 1; i >= 0; i--) {
+		const w = wrappers[i];
+		if (!w) continue;
+		if (w.type === "optional") {
+			current = current.optional();
+		} else if (w.type === "nullable") {
+			current = current.nullable();
+		} else if (w.type === "exactOptional") {
+			current = current.exactOptional
+				? current.exactOptional()
+				: current.optional();
+		} else if (w.type === "default") {
+			current = current.default(w.defaultValue);
+		}
+	}
+	return current;
+}
+
+/**
+ * Recursively overrides error messages across a field definition and all nested innerType checks.
+ */
 function setErrorOnField(field: z.ZodTypeAny, errorMsg: string): z.ZodTypeAny {
 	const cloned = field.clone();
 	const def = (cloned as any)._def;
@@ -13,6 +86,9 @@ function setErrorOnField(field: z.ZodTypeAny, errorMsg: string): z.ZodTypeAny {
 				}
 			}
 		}
+		if (def.innerType) {
+			def.innerType = setErrorOnField(def.innerType, errorMsg);
+		}
 	}
 	return cloned;
 }
@@ -22,71 +98,69 @@ export type RefinedField<T extends z.ZodTypeAny> = T & {
 	 * Overrides the error message on all existing checks and validations of this field
 	 * without adding duplicate validation rules.
 	 */
-	setError(message: string): T;
+	setError(message: string): RefinedField<T>;
 	/**
 	 * Alias for `setError`. Overrides the error message on existing validations of this field.
 	 */
-	withError(message: string): T;
+	withError(message: string): RefinedField<T>;
 };
 
-type UnwrapZod<T extends z.ZodTypeAny> = T extends z.ZodOptional<infer Inner>
-	? RefinedField<Omit<Inner, "type" | "_def"> & z.ZodOptional<Inner>>
-	: T extends z.ZodNullable<infer Inner>
-		? RefinedField<Omit<Inner, "type" | "_def"> & z.ZodNullable<Inner>>
-		: RefinedField<T>;
+type DeepUnwrap<T extends z.ZodTypeAny> =
+	T extends z.ZodOptional<infer Inner extends z.ZodTypeAny>
+		? DeepUnwrap<Inner>
+		: T extends z.ZodNullable<infer Inner extends z.ZodTypeAny>
+			? DeepUnwrap<Inner>
+			: T extends z.ZodExactOptional<infer Inner extends z.ZodTypeAny>
+				? DeepUnwrap<Inner>
+				: T extends z.ZodDefault<infer Inner extends z.ZodTypeAny>
+					? DeepUnwrap<Inner>
+					: T;
 
 export type RefinableShape<T extends Record<string, z.ZodTypeAny>> = {
-	[K in keyof T]: UnwrapZod<T[K]>;
+	[K in keyof T]: RefinedField<DeepUnwrap<T[K]>>;
 };
+
 
 /**
  * Wraps a field schema in a Proxy that automatically delegates inner type methods
- * (e.g. `.min()`, `.email()`, `.max()`) on `z.optional()` and `z.nullable()` fields,
+ * (e.g. `.min()`, `.email()`, `.max()`) on nested wrappers (`z.optional()`, `z.nullable()`,
+ * `z.default()`, `z.exactOptional()`), re-proxies results to allow method chaining,
  * and exposes `.setError()` / `.withError()` to override error messages on existing checks.
  */
 function wrapFieldProxy(field: z.ZodTypeAny): any {
-	const def = (field as any)._def;
-	if (def?.type === "optional" || def?.type === "nullable") {
-		const isOptional = def.type === "optional";
-		const innerType = def.innerType;
-		const innerProxied = wrapFieldProxy(innerType);
-
-		return new Proxy(field, {
-			get(target, prop, receiver) {
-				if (prop === "setError" || prop === "withError") {
-					return (msg: string) => {
-						const updatedInner = setErrorOnField(innerType, msg);
-						return isOptional ? updatedInner.optional() : updatedInner.nullable();
-					};
-				}
-				if (prop in target) {
-					const val = Reflect.get(target, prop, receiver);
-					if (typeof val === "function") return val.bind(target);
-					return val;
-				}
-				if (
-					typeof prop === "string" &&
-					prop in innerProxied &&
-					typeof innerProxied[prop] === "function"
-				) {
-					return (...args: any[]) => {
-						const result = innerProxied[prop](...args);
-						return isOptional ? result.optional() : result.nullable();
-					};
-				}
-				return Reflect.get(target, prop, receiver);
-			},
-		});
-	}
+	const { core, wrappers } = unwrapAll(field);
 
 	return new Proxy(field, {
+		has(target, prop) {
+			if (prop === "setError" || prop === "withError") return true;
+			if (prop in target) return true;
+			return prop in core;
+		},
 		get(target, prop, receiver) {
 			if (prop === "setError" || prop === "withError") {
-				return (msg: string) => setErrorOnField(target, msg);
+				return (msg: string) => {
+					const updated = setErrorOnField(target, msg);
+					return wrapFieldProxy(updated);
+				};
 			}
-			const val = Reflect.get(target, prop, receiver);
-			if (typeof val === "function") return val.bind(target);
-			return val;
+
+			if (prop in target) {
+				const val = Reflect.get(target, prop, receiver);
+				if (typeof val === "function") return val.bind(target);
+			}
+
+			if (
+				typeof prop === "string" &&
+				typeof (core as any)[prop] === "function"
+			) {
+				return (...args: any[]) => {
+					const coreResult = (core as any)[prop](...args);
+					const wrappedResult = applyWrappers(coreResult, wrappers);
+					return wrapFieldProxy(wrappedResult);
+				};
+			}
+
+			return Reflect.get(target, prop, receiver);
 		},
 	});
 }
@@ -96,7 +170,7 @@ function wrapFieldProxy(field: z.ZodTypeAny): any {
  * preserving untouched fields and maintaining full TypeScript type inference.
  *
  * Exposes `.setError("...")` / `.withError("...")` on fields to override existing check messages,
- * and automatically delegates methods on optional or nullable fields.
+ * and automatically delegates methods on optional, nullable, default, or exactOptional fields.
  *
  * @example
  * ```ts
@@ -127,3 +201,4 @@ export function refineSchema<
 		...modifiedFields,
 	}) as any;
 }
+

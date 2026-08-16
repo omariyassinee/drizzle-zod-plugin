@@ -9,10 +9,11 @@ test("loads table-specific sub-module (virtual:drizzle-zod/pgComplexTable)", asy
 
 	expect(pgMod).toBeDefined();
 
-	// Generic short schema exports
+	// Generic short schema exports and refineSchema
 	expect(pgMod.insertSchema).toBeDefined();
 	expect(pgMod.selectSchema).toBeDefined();
 	expect(pgMod.updateSchema).toBeDefined();
+	expect(pgMod.refineSchema).toBeDefined();
 
 	// Make sure table-prefixed duplicate names are NOT exported in sub-modules
 	expect(pgMod.pgComplexTableInsertSchema).toBeUndefined();
@@ -25,6 +26,14 @@ test("loads table-specific sub-module (virtual:drizzle-zod/pgComplexTable)", asy
 		role: "admin",
 	});
 	expect(validPg.role).toBe("admin");
+
+	// Validate refineSchema on virtual module schema
+	const customPg = pgMod.refineSchema(pgMod.insertSchema, (fields: any) => ({
+		role: fields.role.setError("Custom role error"),
+	}));
+	expect(customPg.safeParse({ tags: ["ts"], role: "invalid" }).success).toBe(
+		false,
+	);
 });
 
 test("loads table-specific sub-module (virtual:drizzle-zod/mysqlComplexTable)", async () => {

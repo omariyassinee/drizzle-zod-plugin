@@ -62,13 +62,12 @@ const newUser = insertSchema.parse(formData);
 
 Drizzle-generated schemas reflect raw database column constraints. When building forms, UI inputs, or API boundaries, you often need **custom error messages**, **additional validation rules**, or **type extensions** without losing type safety or untouched fields.
 
-The `refineSchema` helper lets you customize individual fields cleanly:
+The `refineSchema` helper is exported directly by your virtual modules (or from `@omariyassine/drizzle-zod-plugin/refine` for standalone files):
 
 ```ts
-import { insertSchema as baseInsertSchema } from "virtual:drizzle-zod/usersTable";
-import { refineSchema } from "@omariyassine/drizzle-zod-plugin";
+import { insertSchema, refineSchema } from "virtual:drizzle-zod/usersTable";
 
-export const insertUserSchema = refineSchema(baseInsertSchema, (fields) => ({
+export const insertUserSchema = refineSchema(insertSchema, (fields) => ({
   // 1. Override error messages on pre-existing checks (no duplicate validation chains)
   email: fields.email.setError("Please provide a valid email address"),
 

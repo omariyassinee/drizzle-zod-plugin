@@ -1,7 +1,6 @@
 import { drizzleZodVirtual } from "./plugin";
-import { refineSchema } from "./refine";
 
-export { drizzleZodVirtual, refineSchema };
+export { drizzleZodVirtual };
 
 export type { DrizzleZodVirtualOptions } from "./plugin";
 

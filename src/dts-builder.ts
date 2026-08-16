@@ -17,12 +17,13 @@ export function buildDts(opts: {
 		.replace(/\.ts$/, "");
 	if (!relImport.startsWith(".")) relImport = `./${relImport}`;
 
-	const rootExportLines = data.exportNames
-		.map(
+	const rootExportLines = [
+		`export const refineSchema: (typeof import('@omariyassine/drizzle-zod-plugin/refine'))['refineSchema']`,
+		...data.exportNames.map(
 			(name) =>
 				`export const ${name}: (typeof import('${relImport}'))['${name}']`,
-		)
-		.join("\n  ");
+		),
+	].join("\n  ");
 
 	const subModuleDeclarations: string[] = [];
 	for (const tableName of data.tableCodes.keys()) {
@@ -44,6 +45,7 @@ export function buildDts(opts: {
 			: relImport;
 
 		const aliasLines = [
+			`export const refineSchema: (typeof import('@omariyassine/drizzle-zod-plugin/refine'))['refineSchema']`,
 			`export const insertSchema: (typeof import('${subRelImport}'))['${splitByTable ? "insertSchema" : insertName}']`,
 			`export const selectSchema: (typeof import('${subRelImport}'))['${splitByTable ? "selectSchema" : selectName}']`,
 			`export const updateSchema: (typeof import('${subRelImport}'))['${splitByTable ? "updateSchema" : updateName}']`,
