@@ -1,7 +1,7 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-	entry: ["src/index.ts"],
+	entry: ["src/index.ts", "src/cli.ts"],
 	format: ["esm"],
 	dts: false,
 	clean: true,
@@ -17,6 +17,7 @@ export default defineConfig({
 		"node:fs",
 		"node:path",
 		"node:url",
+		"node:util",
 		"node:fs/promises",
 	],
 });

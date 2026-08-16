@@ -5,7 +5,7 @@ node_modules/
 dist/
 out/
 *.tgz
-
+demo/
 # plugin runtime generated files & test outputs
 .drizzle-zod-generated/
 validators.ts

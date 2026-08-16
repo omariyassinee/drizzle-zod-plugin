@@ -69,6 +69,54 @@ const newUser = insertSchema.parse(formData);
 | `splitByTable` | `boolean` | `true` | When `true`, generates individual per-table files plus a barrel `index.ts`. |
 | `noCache` | `boolean` | `false` | Disable in-memory result caching. |
 
+## 💻 CLI Usage (`vdz`)
+
+You can generate standalone Zod validation schemas on demand via the CLI, bypassing all caching mechanisms:
+
+```bash
+# Using bunx or npx
+bunx vdz generate
+npx vdz generate
+
+# Or run directly (defaults to generate)
+bunx vdz
+```
+
+### CLI Options
+
+```bash
+vdz generate [options]
+
+Options:
+  -s, --schema <path>      Path to Drizzle schema file (auto-detects from drizzle.config.* if omitted)
+  -o, --output <path>      Output directory or file path for generated schemas (default: ./validators)
+  -t, --tables <names>     Comma-separated list of table names to include
+  --split                  Generate separate files per table (default: true)
+  --no-split               Generate all schemas in a single file
+  -m, --module-id <id>     Virtual module ID (default: virtual:drizzle-zod)
+  -r, --root <path>        Project root directory (default: current working directory)
+  -c, --config <path>      Explicit path to drizzle.config file
+  -v, --version            Show version
+  -h, --help               Show help message
+```
+
+### Examples
+
+```bash
+# Generate schemas into ./validators (auto-detecting schema from drizzle.config.ts)
+bunx vdz generate
+
+# Generate into a custom folder
+bunx vdz generate --schema ./src/db/schema.ts --output ./src/validators
+
+# Generate all schemas into a single file
+bunx vdz generate --no-split --output ./src/validators.ts
+
+# Generate schemas only for specific tables
+bunx vdz generate --tables users,posts
+```
+
 ## 📄 License
 
 [MIT](./LICENSE) © [Yassine Omari](https://github.com/omariyassinee)
+
