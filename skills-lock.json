@@ -2,10 +2,11 @@
   "version": 1,
   "skills": {
     "zod": {
-      "source": "anivar/zod-skill",
-      "sourceType": "github",
-      "skillPath": "SKILL.md",
-      "computedHash": "8f746325460dba852bd07b63d3afd74af86fcf267def6dc509694882a58d91ee"
+      "source": "smithery.ai",
+      "sourceUrl": "https://smithery.ai/skills/secondsky/zod",
+      "sourceType": "well-known",
+      "computedHash": "63138c4bc8d08bf817e1285c20de1038d4cb951d3d55633d5274b3bce6467f9f",
+      "wellKnownDigest": "sha256:f3a244a80d882516cee64f8f50eb65d4253ebdcd5bca83014a46e00f5d8a717a"
     }
   }
 }
