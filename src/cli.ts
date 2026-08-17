@@ -6,7 +6,7 @@ import { writeGeneratedFiles } from "./file-writer";
 import { getResolvedPaths } from "./paths";
 import { generateSchemas } from "./schema-generator";
 
-const VERSION = "0.1.313";
+const VERSION = "0.1.314";
 
 const HELP_TEXT = `
 vdz - CLI for Drizzle Zod Virtual Plugin
@@ -102,7 +102,8 @@ export async function runCli(
 
 	const outputPath = (values.output as string | undefined) ?? "./validators";
 	const splitByTable = values["no-split"] ? false : values.split !== false;
-	const moduleId = (values["module-id"] as string | undefined) ?? "virtual:drizzle-zod";
+	const moduleId =
+		(values["module-id"] as string | undefined) ?? "virtual:drizzle-zod";
 	const tables = values.tables
 		? (values.tables as string)
 				.split(",")
@@ -145,7 +146,8 @@ export async function runCli(
 
 // Auto-run if executed directly as entrypoint
 const isMain =
-	(typeof (import.meta as any).main === "boolean" && (import.meta as any).main) ||
+	(typeof (import.meta as any).main === "boolean" &&
+		(import.meta as any).main) ||
 	(process.argv[1] &&
 		(process.argv[1].endsWith("cli.ts") ||
 			process.argv[1].endsWith("cli.js") ||

@@ -135,14 +135,14 @@ export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
 
 		async load(id) {
 			if (!id.startsWith(RESOLVED_PREFIX + moduleId)) return;
-			await generateAndMaybeWrite();
+			const data = await generateAndMaybeWrite();
 
 			if (id === resolvedId) {
-				return cachedData?.code;
+				return data.code;
 			}
 
 			const subPath = id.slice(RESOLVED_PREFIX.length + moduleId.length + 1);
-			const subModule = cachedData?.tableCodes.get(subPath);
+			const subModule = data.tableCodes.get(subPath);
 			if (subModule) {
 				return subModule.code;
 			}
