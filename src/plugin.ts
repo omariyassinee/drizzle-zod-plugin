@@ -36,7 +36,9 @@ import type { DrizzleZodVirtualOptions, GeneratedData } from "./types";
 
 export type { DrizzleZodVirtualOptions } from "./types";
 
-export function drizzleZodVirtual(options: DrizzleZodVirtualOptions): Plugin {
+export function drizzleZodVirtual(
+	options: DrizzleZodVirtualOptions = {},
+): Plugin {
 	const moduleId = options.moduleId ?? "virtual:drizzle-zod";
 	const resolvedId = RESOLVED_PREFIX + moduleId;
 	const splitByTable = options.splitByTable ?? true;

@@ -29,7 +29,7 @@ test("CLI --version displays version without errors", async () => {
 
 	try {
 		await runCli(["--version"]);
-		expect(output).toContain("vdz v0.1.313");
+		expect(output).toContain("vdz v0.1.315");
 	} finally {
 		console.log = originalLog;
 	}

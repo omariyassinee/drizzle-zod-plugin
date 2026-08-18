@@ -1,9 +1,12 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join as joinPath, resolve as resolvePath } from "node:path";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import * as esbuild from "esbuild";
-import type { GeneratedData, TableCodeData } from "./types";
+
 import { zodTypeToCode } from "./zod-serializer";
+
+import * as esbuild from "esbuild";
+
+import type { GeneratedData, TableCodeData } from "./types";
 
 export async function generateSchemas(opts: {
 	absoluteSchemaPath: string;
@@ -16,8 +19,26 @@ export async function generateSchemas(opts: {
 	const { absoluteSchemaPath, schemaPath, tmpDir, viteRoot, tables } = opts;
 	const moduleId = opts.moduleId ?? "virtual:drizzle-zod";
 
+	async function loadSchemaCreators() {
+		try {
+			const mod = await import("drizzle-orm/zod");
+			return {
+				createInsertSchema: mod.createInsertSchema,
+				createSelectSchema: mod.createSelectSchema,
+				createUpdateSchema: mod.createUpdateSchema,
+			};
+		} catch {
+			const mod = await import("drizzle-zod");
+			return {
+				createInsertSchema: mod.createInsertSchema,
+				createSelectSchema: mod.createSelectSchema,
+				createUpdateSchema: mod.createUpdateSchema,
+			};
+		}
+	}
+
 	const { createInsertSchema, createSelectSchema, createUpdateSchema } =
-		await import("drizzle-orm/zod");
+		await loadSchemaCreators();
 
 	const { is, Table } = await import("drizzle-orm");
 
