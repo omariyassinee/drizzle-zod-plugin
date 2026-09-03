@@ -32,4 +32,7 @@ logs/
 .DS_Store
 
 
-.agents
+.agents/
+.claude/
+reports/
+validators/

@@ -1,12 +1,34 @@
 #!/usr/bin/env node
-import { resolve as resolvePath } from "node:path";
+import { readFileSync } from "node:fs";
+import { dirname, join as joinPath, resolve as resolvePath } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { resolveSchemaPath } from "./drizzle-config";
 import { writeGeneratedFiles } from "./file-writer";
 import { getResolvedPaths } from "./paths";
 import { generateSchemas } from "./schema-generator";
 
-const VERSION = "0.1.315";
+/**
+ * Reads the version from package.json at runtime rather than hardcoding it
+ * (finding L1). `import.meta.url` is module-relative, so this resolves both
+ * when running from src/ (bun test) and from dist/cli.js in the published
+ * package (npm always ships package.json alongside dist/).
+ */
+function readVersion(): string {
+	try {
+		const pkgPath = joinPath(
+			dirname(fileURLToPath(import.meta.url)),
+			"..",
+			"package.json",
+		);
+		const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+		return typeof pkg.version === "string" ? pkg.version : "0.0.0";
+	} catch {
+		return "0.0.0";
+	}
+}
+
+const VERSION = readVersion();
 
 const HELP_TEXT = `
 vdz - CLI for Drizzle Zod Virtual Plugin
@@ -95,7 +117,7 @@ export async function runCli(
 
 	if (!schemaPath) {
 		schemaPath = await resolveSchemaPath({
-			schemaPath: values.config ? (values.config as string) : undefined,
+			configPath: values.config ? (values.config as string) : undefined,
 			projectRoot,
 		});
 	}

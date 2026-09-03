@@ -104,7 +104,11 @@ export async function writeGeneratedFiles(opts: {
 			writeFile(dtsPath, primaryDts),
 		),
 	);
-	// Write @types shim with its own correctly computed relative paths
+	// Write @types shim with its own correctly computed relative paths.
+	// NOTE (finding M7): the .catch(() => {}) swallows write errors here —
+	// acceptable because the @types shim is a best-effort DX nicety (the
+	// primary .d.ts above is the source of truth and DOES fail loud).
+	// If the shim is missing, TS falls back to the primary declaration.
 	fileWritePromises.push(
 		mkdir(nodeTypesDir, { recursive: true })
 			.then(() => writeFile(nodeTypesDtsPath, nodeTypesDts))

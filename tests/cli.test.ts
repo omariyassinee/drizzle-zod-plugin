@@ -3,6 +3,9 @@ import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runCli } from "../src/cli";
+import pkg from "../package.json";
+
+const VERSION = pkg.version;
 
 test("CLI --help displays help without errors", async () => {
 	let output = "";
@@ -29,7 +32,7 @@ test("CLI --version displays version without errors", async () => {
 
 	try {
 		await runCli(["--version"]);
-		expect(output).toContain("vdz v0.1.315");
+		expect(output).toContain(`vdz v${VERSION}`);
 	} finally {
 		console.log = originalLog;
 	}

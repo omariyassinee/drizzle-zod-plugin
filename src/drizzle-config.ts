@@ -18,18 +18,29 @@ const CANDIDATE_NAMES = [
  */
 export async function resolveSchemaPath(opts: {
 	schemaPath?: string;
+	configPath?: string;
 	projectRoot: string;
 }): Promise<string> {
 	// 1. Explicit schemaPath wins
 	if (opts.schemaPath) return opts.schemaPath;
 
-	// 2. Look for drizzle.config.*
+	// 2. Explicit configPath (--config) — resolve + validate, fail loud if missing
 	let configPath: string | undefined;
-	for (const name of CANDIDATE_NAMES) {
-		const full = resolvePath(opts.projectRoot, name);
-		if (await fileExists(full)) {
-			configPath = full;
-			break;
+	if (opts.configPath) {
+		configPath = resolvePath(opts.projectRoot, opts.configPath);
+		if (!(await fileExists(configPath))) {
+			throw new Error(
+				`[drizzle-zod-virtual] Explicit config file not found: ${configPath}`,
+			);
+		}
+	} else {
+		// 3. Look for drizzle.config.*
+		for (const name of CANDIDATE_NAMES) {
+			const full = resolvePath(opts.projectRoot, name);
+			if (await fileExists(full)) {
+				configPath = full;
+				break;
+			}
 		}
 	}
 

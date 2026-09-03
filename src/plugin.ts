@@ -177,7 +177,16 @@ export function drizzleZodVirtual(
 
 			let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
-			server.watcher.on("change", (file) => {
+			// Unified handler for change/add/unlink events (finding M5):
+			//  - "add"/"change" on the schema or a watched dependency triggers
+			//    regeneration (a newly created file can satisfy an import that
+			//    previously failed).
+			//  - "unlink" cleans up the tracked path so a re-created file gets
+			//    re-added to the watcher.
+			//  - regeneration errors are caught so a transient failure (e.g.
+			//    mid-edit syntax error) doesn't crash the dev server; the next
+			//    successful save regenerates.
+			const handleFileEvent = (file: string) => {
 				const resolvedFile = resolvePath(file);
 				if (
 					resolvedFile === absoluteSchemaPath ||
@@ -186,31 +195,44 @@ export function drizzleZodVirtual(
 					if (debounceTimer) clearTimeout(debounceTimer);
 					debounceTimer = setTimeout(async () => {
 						debounceTimer = undefined;
-						const data = await generateAndMaybeWrite(true);
-						if (!data) return;
-						for (const p of data.depPaths) {
-							if (!watchedDeps.has(p)) {
-								watchedDeps.add(p);
-								server.watcher.add(p);
-							}
-						}
-						const mod = server.moduleGraph.getModuleById(resolvedId);
-						if (mod) {
-							server.moduleGraph.invalidateModule(mod);
-						}
-						if (cachedData) {
-							for (const tableName of cachedData.tableCodes.keys()) {
-								const subMod = server.moduleGraph.getModuleById(
-									`${RESOLVED_PREFIX}${moduleId}/${tableName}`,
-								);
-								if (subMod) {
-									server.moduleGraph.invalidateModule(subMod);
+						try {
+							const data = await generateAndMaybeWrite(true);
+							if (!data) return;
+							for (const p of data.depPaths) {
+								if (!watchedDeps.has(p)) {
+									watchedDeps.add(p);
+									server.watcher.add(p);
 								}
 							}
+							const mod = server.moduleGraph.getModuleById(resolvedId);
+							if (mod) {
+								server.moduleGraph.invalidateModule(mod);
+							}
+							if (cachedData) {
+								for (const tableName of cachedData.tableCodes.keys()) {
+									const subMod = server.moduleGraph.getModuleById(
+										`${RESOLVED_PREFIX}${moduleId}/${tableName}`,
+									);
+									if (subMod) {
+										server.moduleGraph.invalidateModule(subMod);
+									}
+								}
+							}
+							server.ws.send({ type: "full-reload" });
+						} catch (err) {
+							server.config.logger.error(
+								`[drizzle-zod-virtual] Regeneration failed (will retry on next change): ${err instanceof Error ? err.message : String(err)}`,
+							);
 						}
-						server.ws.send({ type: "full-reload" });
 					}, 150);
 				}
+			};
+
+			server.watcher.on("change", handleFileEvent);
+			server.watcher.on("add", handleFileEvent);
+			server.watcher.on("unlink", (file) => {
+				const resolvedFile = resolvePath(file);
+				watchedDeps.delete(resolvedFile);
 			});
 		},
 	};

@@ -99,7 +99,21 @@ export async function generateSchemas(opts: {
 	const exportNames: string[] = [];
 	const tableCodes = new Map<string, TableCodeData>();
 
+	// A table name that is not a valid JS identifier (e.g. "user-profile" or
+	// "order items") would produce syntactically invalid export names like
+	// `user-profileInsertSchema` — a syntax error in the generated file.
+	// Fail loud at generation time instead (finding M3).
+	const VALID_IDENTIFIER_REGEX = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+
 	for (const tableName of tableNames) {
+		if (!VALID_IDENTIFIER_REGEX.test(tableName)) {
+			throw new Error(
+				`[drizzle-zod-virtual] Table name "${tableName}" is not a valid JS identifier — ` +
+					`it cannot be used to generate export names (e.g. ${tableName}InsertSchema). ` +
+					`Rename the export in your schema file, or pass an explicit "tables" list.`,
+			);
+		}
+
 		const table = schemaModule[tableName] as any;
 		if (!table) {
 			throw new Error(

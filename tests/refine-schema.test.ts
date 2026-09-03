@@ -79,12 +79,12 @@ test("refineSchema transparently handles optional and nullable fields", () => {
 	}));
 
 	// Valid optional/null inputs still pass
-	expect(
-		refined.safeParse({ id: 1, age: undefined, bio: null }).success,
-	).toBe(true);
-	expect(
-		refined.safeParse({ id: 1, age: 25, bio: "Developer" }).success,
-	).toBe(true);
+	expect(refined.safeParse({ id: 1, age: undefined, bio: null }).success).toBe(
+		true,
+	);
+	expect(refined.safeParse({ id: 1, age: 25, bio: "Developer" }).success).toBe(
+		true,
+	);
 
 	// Custom error on optional field constraint failure
 	const invalidAge = refined.safeParse({ id: 1, age: 16, bio: null });
@@ -118,7 +118,9 @@ test("refineSchema allows extending the schema with completely new fields", () =
 	const extendedSchema = refineSchema(userSchema, (fields) => ({
 		email: fields.email.setError("Invalid email address"),
 		// New fields:
-		confirmPassword: z.string().min(8, { error: "Password must be at least 8 chars" }),
+		confirmPassword: z
+			.string()
+			.min(8, { error: "Password must be at least 8 chars" }),
 		agreedToTerms: z.boolean(),
 	}));
 
@@ -183,4 +185,108 @@ test("refineSchema preserves optional and nullable TypeScript inference when che
 	expect(parseResult.success).toBe(true);
 });
 
+test("refineSchema .format() and .asEmail() / .asUrl() / .asUuid() convert formats and preserve wrappers", () => {
+	const baseSchema = z.object({
+		email: z.string(),
+		optionalEmail: z.string().optional(),
+		nullableUrl: z.string().nullable(),
+		userId: z.string(),
+		customUuid: z.string(),
+	});
 
+	const refined = refineSchema(baseSchema, (fields) => ({
+		email: fields.email.asEmail({ error: "Invalid work email" }),
+		optionalEmail: fields.optionalEmail.format("email", {
+			error: "Invalid optional email",
+		}),
+		nullableUrl: fields.nullableUrl.asUrl({ error: "Invalid website url" }),
+		userId: fields.userId.asUuid({ error: "Invalid user uuid" }),
+		customUuid: fields.customUuid.as(
+			z.string().uuid({ error: "Invalid custom uuid" }),
+		),
+	}));
+
+	// 1. Valid payload
+	const valid = refined.safeParse({
+		email: "alex@example.com",
+		optionalEmail: undefined,
+		nullableUrl: null,
+		userId: "123e4567-e89b-12d3-a456-426614174000",
+		customUuid: "123e4567-e89b-12d3-a456-426614174000",
+	});
+	expect(valid.success).toBe(true);
+
+	// 2. Invalid email error message
+	const invalidEmail = refined.safeParse({
+		email: "invalid-email-format",
+		nullableUrl: null,
+		userId: "123e4567-e89b-12d3-a456-426614174000",
+		customUuid: "123e4567-e89b-12d3-a456-426614174000",
+	});
+	expect(invalidEmail.success).toBe(false);
+	if (!invalidEmail.success) {
+		expect((invalidEmail as any).error?.issues[0]?.message).toBe(
+			"Invalid work email",
+		);
+	}
+
+	// 3. Invalid optional email when provided
+	const invalidOptionalEmail = refined.safeParse({
+		email: "alex@example.com",
+		optionalEmail: "not-an-email",
+		nullableUrl: null,
+		userId: "123e4567-e89b-12d3-a456-426614174000",
+		customUuid: "123e4567-e89b-12d3-a456-426614174000",
+	});
+	expect(invalidOptionalEmail.success).toBe(false);
+	if (!invalidOptionalEmail.success) {
+		expect((invalidOptionalEmail as any).error?.issues[0]?.message).toBe(
+			"Invalid optional email",
+		);
+	}
+
+	// 4. Invalid nullable URL when provided
+	const invalidUrl = refined.safeParse({
+		email: "alex@example.com",
+		nullableUrl: "not-a-url",
+		userId: "123e4567-e89b-12d3-a456-426614174000",
+		customUuid: "123e4567-e89b-12d3-a456-426614174000",
+	});
+	expect(invalidUrl.success).toBe(false);
+	if (!invalidUrl.success) {
+		expect((invalidUrl as any).error?.issues[0]?.message).toBe(
+			"Invalid website url",
+		);
+	}
+
+	// 5. Invalid UUID
+	const invalidUuid = refined.safeParse({
+		email: "alex@example.com",
+		nullableUrl: null,
+		userId: "bad-uuid",
+		customUuid: "123e4567-e89b-12d3-a456-426614174000",
+	});
+	expect(invalidUuid.success).toBe(false);
+	if (!invalidUuid.success) {
+		expect((invalidUuid as any).error?.issues[0]?.message).toBe(
+			"Invalid user uuid",
+		);
+	}
+
+	// 6. Chaining setError on asEmail
+	const chainRefined = refineSchema(baseSchema, (fields) => ({
+		email: fields.email.asEmail().setError("Chained email error override"),
+	}));
+	const chainedInvalid = chainRefined.safeParse({
+		email: "not-an-email",
+		nullableUrl: null,
+		userId: "123e4567-e89b-12d3-a456-426614174000",
+		customUuid: "123e4567-e89b-12d3-a456-426614174000",
+	});
+	expect(chainedInvalid.success).toBe(false);
+	if (!chainedInvalid.success) {
+		expect((chainedInvalid as any).error?.issues[0]?.message).toBe(
+			"Chained email error override",
+		);
+	}
+});

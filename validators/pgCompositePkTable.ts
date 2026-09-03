@@ -4,21 +4,21 @@ export { refineSchema } from '@omariyassine/drizzle-zod-plugin/refine'
 
 export const insertSchema = z.object({
   "tenantId": z.uuid(),
-  "userId": z.number(),
+  "userId": z.int().gte(-2147483648).lte(2147483647),
   "role": z.string().optional(),
 })
 export const pgCompositePkTableInsertSchema = insertSchema
 
 export const selectSchema = z.object({
   "tenantId": z.uuid(),
-  "userId": z.number(),
+  "userId": z.int().gte(-2147483648).lte(2147483647),
   "role": z.string(),
 })
 export const pgCompositePkTableSelectSchema = selectSchema
 
 export const updateSchema = z.object({
   "tenantId": z.uuid().optional(),
-  "userId": z.number().optional(),
+  "userId": z.int().gte(-2147483648).lte(2147483647).optional(),
   "role": z.string().optional(),
 })
 export const pgCompositePkTableUpdateSchema = updateSchema
