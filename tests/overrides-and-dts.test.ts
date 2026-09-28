@@ -32,7 +32,15 @@ test("generates and writes split schema files and .d.ts accurately", async () =>
 	expect(existsSync(absBarrel)).toBe(true);
 
 	const barrelCode = readFileSync(absBarrel, "utf-8");
-	expect(barrelCode).toContain("export * from './usersWithOverrides'");
+	expect(barrelCode).toContain(
+		"export { usersWithOverridesInsertSchema } from './usersWithOverrides'",
+	);
+	expect(barrelCode).toContain(
+		"export { usersWithOverridesSelectSchema } from './usersWithOverrides'",
+	);
+	expect(barrelCode).toContain(
+		"export { usersWithOverridesUpdateSchema } from './usersWithOverrides'",
+	);
 
 	// Check output .d.ts file exists
 	const absDtsPath = resolve(
@@ -73,4 +81,46 @@ test("generates single file when splitByTable is false", async () => {
 	expect(generatedCode).toContain(
 		"export const usersWithOverridesUpdateSchema =",
 	);
+});
+
+test("multi-table split schema barrel index.ts does not cause TS2308 ambiguity errors and typechecks cleanly", async () => {
+	const outputPath = "./.drizzle-zod-generated/barrel-multi-table-test";
+	const plugin = drizzleZodVirtual({
+		schemaPath: "./tests/fixtures/complex-schemas.ts",
+		outputPath,
+	});
+
+	await (plugin as any).load("\0virtual:drizzle-zod");
+
+	const absBarrel = resolve(process.cwd(), outputPath, "index.ts");
+	expect(existsSync(absBarrel)).toBe(true);
+
+	const barrelCode = readFileSync(absBarrel, "utf-8");
+	// Ensure barrel does NOT use wildcard re-exports which cause TS2308 collisions across tables
+	expect(barrelCode).not.toContain("export * from");
+	expect(barrelCode).toContain(
+		"export { pgComplexTableInsertSchema } from './pgComplexTable'",
+	);
+	expect(barrelCode).toContain(
+		"export { mysqlComplexTableInsertSchema } from './mysqlComplexTable'",
+	);
+
+	// Run TypeScript compiler on the generated barrel file to verify no TS2308 errors
+	const proc = Bun.spawnSync([
+		process.execPath,
+		"x",
+		"tsc",
+		"--noEmit",
+		"--ignoreConfig",
+		"--moduleResolution",
+		"bundler",
+		"--target",
+		"esnext",
+		"--module",
+		"preserve",
+		"--types",
+		"bun",
+		absBarrel,
+	]);
+	expect(proc.exitCode).toBe(0);
 });
