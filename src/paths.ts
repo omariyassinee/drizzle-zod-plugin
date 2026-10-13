@@ -50,7 +50,9 @@ export function getResolvedPaths(
 			: resolvePath(dirname(absoluteOutputPath), "virtual-drizzle-zod.d.ts")
 		: resolvePath(viteRoot, "virtual-drizzle-zod.d.ts");
 
-	const tmpDir = joinPath(viteRoot, "node_modules", ".drizzle-zod-virtual-tmp");
+		// Keep the bundled module inside the project root so package self-references
+		// and workspace exports resolve from the package that owns the schema.
+		const tmpDir = joinPath(viteRoot, ".drizzle-zod-virtual-tmp");
 
 	return {
 		absoluteSchemaPath,

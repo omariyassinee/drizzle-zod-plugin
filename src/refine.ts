@@ -1,4 +1,31 @@
-import { z } from "zod";
+import {
+	base64,
+	base64url,
+	cidrv4,
+	cidrv6,
+	cuid,
+	cuid2,
+	e164,
+	email,
+	emoji,
+	guid,
+	httpUrl,
+	ipv4,
+	ipv6,
+	jwt,
+	ksuid,
+	nanoid,
+	object,
+	string,
+	ulid,
+	url,
+	uuid,
+	uuidv4,
+	uuidv6,
+	uuidv7,
+	xid,
+	type z,
+} from "zod";
 import type { STRING_FORMAT_NAMES } from "./constants";
 
 type WrapperDef = {
@@ -133,16 +160,46 @@ function setErrorOnField(field: z.ZodTypeAny, errorMsg: string): z.ZodTypeAny {
 	return field;
 }
 
+const FORMAT_BUILDERS: Record<
+	string,
+	((params?: FormatParams) => z.ZodTypeAny) | undefined
+> = {
+	email,
+	url,
+	httpUrl,
+	uuid,
+	uuidv4,
+	uuidv6,
+	uuidv7,
+	guid,
+	cuid,
+	cuid2,
+	ulid,
+	emoji,
+	nanoid,
+	jwt,
+	ipv4,
+	ipv6,
+	cidrv4,
+	cidrv6,
+	base64,
+	base64url,
+	xid,
+	ksuid,
+	e164,
+};
+
 function createFormatSchema(
 	formatName: string,
 	params?: FormatParams,
 ): z.ZodTypeAny {
-	const fn = (z as any)[formatName];
+	const fn = FORMAT_BUILDERS[formatName];
 	if (typeof fn === "function") {
 		return fn(params);
 	}
-	if (typeof (z.string() as any)[formatName] === "function") {
-		return (z.string() as any)[formatName](params);
+	const str = string() as any;
+	if (typeof str[formatName] === "function") {
+		return str[formatName](params);
 	}
 	throw new Error(
 		`[drizzle-zod-plugin] Unknown format "${formatName}" in z.${formatName}()`,
@@ -445,7 +502,7 @@ export function refineSchema<
 	}
 
 	const modifiedFields = refinementFn(proxiedShape as any);
-	return z.object({
+	return object({
 		...baseSchema.shape,
 		...modifiedFields,
 	}) as any;

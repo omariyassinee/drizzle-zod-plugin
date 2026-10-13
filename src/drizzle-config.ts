@@ -70,11 +70,7 @@ export async function resolveSchemaPath(opts: {
 		);
 	}
 
-	const tmpDir = resolvePath(
-		opts.projectRoot,
-		"node_modules",
-		".drizzle-zod-virtual-tmp",
-	);
+	const tmpDir = resolvePath(opts.projectRoot, ".drizzle-zod-virtual-tmp");
 	await mkdir(tmpDir, { recursive: true });
 	const tmpFile = joinPath(tmpDir, `drizzle-config-${Date.now()}.mjs`);
 	await writeFile(tmpFile, bundledCode);
