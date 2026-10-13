@@ -11,7 +11,7 @@ test("returns explicit schemaPath directly when provided", async () => {
 	expect(result).toBe("./src/db/schema.ts");
 });
 
-test("auto-detects schema path from drizzle.config.ts", async () => {
+test("auto-detects schema path from drizzle.config.ts (relative to config dir)", async () => {
 	const tmpDir = join(process.cwd(), "node_modules", ".tmp-drizzle-config-test-1");
 	mkdirSync(tmpDir, { recursive: true });
 
@@ -22,7 +22,44 @@ test("auto-detects schema path from drizzle.config.ts", async () => {
 		);
 
 		const resolved = await resolveSchemaPath({ projectRoot: tmpDir });
-		expect(resolved).toBe("./src/schema.ts");
+		// Relative schema paths resolve against the CONFIG FILE'S directory
+		// (drizzle-kit behavior — required for monorepo layouts).
+		expect(resolved).toBe(join(tmpDir, "src", "schema.ts"));
+	} finally {
+		rmSync(tmpDir, { recursive: true, force: true });
+	}
+});
+
+test("auto-detects schema path from drizzle.config.json", async () => {
+	const tmpDir = join(process.cwd(), "node_modules", ".tmp-drizzle-config-test-json");
+	mkdirSync(tmpDir, { recursive: true });
+
+	try {
+		writeFileSync(
+			join(tmpDir, "drizzle.config.json"),
+			JSON.stringify({ schema: "./src/schema.ts", dialect: "postgresql" }),
+		);
+
+		const resolved = await resolveSchemaPath({ projectRoot: tmpDir });
+		expect(resolved).toBe(join(tmpDir, "src", "schema.ts"));
+	} finally {
+		rmSync(tmpDir, { recursive: true, force: true });
+	}
+});
+
+test("absolute schema path from config passes through unchanged", async () => {
+	const tmpDir = join(process.cwd(), "node_modules", ".tmp-drizzle-config-test-abs");
+	mkdirSync(tmpDir, { recursive: true });
+
+	try {
+		const absoluteSchema = join(tmpDir, "schema.ts");
+		writeFileSync(
+			join(tmpDir, "drizzle.config.ts"),
+			`export default { schema: ${JSON.stringify(absoluteSchema)} };`,
+		);
+
+		const resolved = await resolveSchemaPath({ projectRoot: tmpDir });
+		expect(resolved).toBe(absoluteSchema);
 	} finally {
 		rmSync(tmpDir, { recursive: true, force: true });
 	}

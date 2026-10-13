@@ -444,6 +444,18 @@ function _zodTypeToCode(
 	}
 	const def = (schema as any)._def ?? (schema as any).def;
 
+	// Zod 3 marker: defs carry `typeName` (e.g. "ZodString") and NO `_zod`
+	// runtime marker. This serializer is built against Zod 4 internals only
+	// — fail loud instead of mis-serializing checks into weaker validation
+	// (finding C1; Zod 3 support is explicitly out of scope).
+	if ((schema as any)._zod === undefined && def?.typeName) {
+		throw new Error(
+			`[drizzle-zod-virtual] Detected Zod 3 schemas (def.typeName = "${def.typeName}"). ` +
+				`This plugin only supports zod@4 — please upgrade zod to ^4.0.0 ` +
+				`along with drizzle-orm >= 0.43 (or drizzle-zod >= 0.7).`,
+		);
+	}
+
 	if (!def || typeof def.type !== "string") {
 		throw new Error(
 			`[drizzle-zod-virtual] Could not read a valid def.type from schema. ` +

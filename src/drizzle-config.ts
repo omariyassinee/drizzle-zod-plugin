@@ -1,5 +1,10 @@
 import { access, mkdir, rm, writeFile } from "node:fs/promises";
-import { join as joinPath, resolve as resolvePath } from "node:path";
+import {
+	dirname,
+	isAbsolute,
+	join as joinPath,
+	resolve as resolvePath,
+} from "node:path";
 import { pathToFileURL } from "node:url";
 import * as esbuild from "esbuild";
 
@@ -7,7 +12,31 @@ const CANDIDATE_NAMES = [
 	"drizzle.config.ts",
 	"drizzle.config.js",
 	"drizzle.config.mjs",
+	"drizzle.config.json",
 ];
+
+/**
+ * Finds the drizzle config file in `projectRoot` (or the explicitly provided
+ * `configPath`), without bundling/importing it. Returns the absolute path,
+ * or undefined when no config can be found.
+ *
+ * Exported so the Vite plugin can watch the config file for changes
+ * (finding P5) — a changed config may point at a different schema file.
+ */
+export async function findDrizzleConfigPath(opts: {
+	configPath?: string;
+	projectRoot: string;
+}): Promise<string | undefined> {
+	if (opts.configPath) {
+		const resolved = resolvePath(opts.projectRoot, opts.configPath);
+		return (await fileExists(resolved)) ? resolved : undefined;
+	}
+	for (const name of CANDIDATE_NAMES) {
+		const full = resolvePath(opts.projectRoot, name);
+		if (await fileExists(full)) return full;
+	}
+	return undefined;
+}
 
 /**
  * Resolves the Drizzle schema path.
@@ -21,28 +50,12 @@ export async function resolveSchemaPath(opts: {
 	configPath?: string;
 	projectRoot: string;
 }): Promise<string> {
-	// 1. Explicit schemaPath wins
+	// 1. Explicit schemaPath wins (returned as-is; callers resolve it against
+	//    the Vite root, matching previous behavior).
 	if (opts.schemaPath) return opts.schemaPath;
 
-	// 2. Explicit configPath (--config) — resolve + validate, fail loud if missing
-	let configPath: string | undefined;
-	if (opts.configPath) {
-		configPath = resolvePath(opts.projectRoot, opts.configPath);
-		if (!(await fileExists(configPath))) {
-			throw new Error(
-				`[drizzle-zod-virtual] Explicit config file not found: ${configPath}`,
-			);
-		}
-	} else {
-		// 3. Look for drizzle.config.*
-		for (const name of CANDIDATE_NAMES) {
-			const full = resolvePath(opts.projectRoot, name);
-			if (await fileExists(full)) {
-				configPath = full;
-				break;
-			}
-		}
-	}
+	// 2. Find the config (explicit --config wins; else scan candidates)
+	const configPath = await findDrizzleConfigPath(opts);
 
 	if (!configPath) {
 		throw new Error(
@@ -86,7 +99,13 @@ export async function resolveSchemaPath(opts: {
 	const rawSchema = config?.schema;
 
 	if (typeof rawSchema === "string") {
-		return rawSchema;
+		// Drizzle resolves relative schema paths against the CONFIG FILE'S
+		// directory, not the project root — match that so monorepo layouts
+		// (e.g. packages/db/drizzle.config.ts with schema './src/schema.ts')
+		// resolve correctly (finding C3). Absolute paths pass through.
+		return isAbsolute(rawSchema)
+			? rawSchema
+			: resolvePath(dirname(configPath), rawSchema);
 	}
 
 	if (Array.isArray(rawSchema) && rawSchema.length > 0) {
