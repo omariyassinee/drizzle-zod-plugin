@@ -5,11 +5,12 @@ node_modules/
 dist/
 out/
 *.tgz
-demo/
 # plugin runtime generated files & test outputs
-.drizzle-zod-generated/
+.drizzle-validators-generated/
+.drizzle-validators-tmp/
+tmp-out/
 validators.ts
-virtual-drizzle-zod.d.ts
+virtual-drizzle-validators.d.ts
 scratch_*.ts
 
 # code coverage & logs

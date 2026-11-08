@@ -1,149 +1,19 @@
-# @omariyassine/drizzle-zod-plugin
+# @vacuus/drizzle-validators — monorepo
 
-Vite plugin to generate zero-overhead, virtual Zod validation schemas directly from Drizzle ORM tables at dev and build time.
+Bun workspaces monorepo with two packages:
 
-## ⚡ What It Solves
+| Workspace | Path | Description |
+| :--- | :--- | :--- |
+| `@vacuus/drizzle-validators` | [`packages/drizzle-validators`](./packages/drizzle-validators) | The published package: Vite plugin + CLI that generate virtual validation schemas (Zod, Valibot, TypeBox) from Drizzle tables. |
+| Playgrounds | [`playgrounds/`](./playgrounds) | Real-world test applications, one workspace per scenario (intentionally empty for now). |
 
-Importing `drizzle-zod` or `drizzle-orm` in client-side code bloats JavaScript bundles and pulls server-only ORM dependencies into the browser.
-
-`drizzle-zod-plugin` evaluates your Drizzle tables in a server process and exposes **virtual Zod modules** containing plain, standalone Zod definitions (`z.object(...)`). **Zero Drizzle code reaches your client bundle.**
-
-## 📦 Installation
-
-```bash
-npm install -D @omariyassine/drizzle-zod-plugin
-# or
-bun add -d @omariyassine/drizzle-zod-plugin
-```
-
-## ⚙️ Quick Setup
-
-Add the plugin to your `vite.config.ts`:
-
-```ts
-import { defineConfig } from 'vite';
-import { drizzleZodVirtual } from '@omariyassine/drizzle-zod-plugin';
-
-export default defineConfig({
-  plugins: [
-    drizzleZodVirtual({
-      schemaPath: './src/db/schema.ts',
-      // outputPath: './zod-schemas/generated.ts' // optional
-    }),
-  ],
-});
-```
-
-By default (`outputPath` omitted), generated schemas are served virtually in-memory — no clutter appears in your project tree. TypeScript types are emitted into `virtual-drizzle-zod.d.ts` in your project root so you get full autocomplete and inference. If you want visible schema files for inspection, simply provide `outputPath`.
-
-## 🚀 Usage & Tree-Shaking
-
-### 1. Root Import (Automatic Tree-Shaking)
-
-The root virtual module acts as a barrel of static ES subpath re-exports with `/* @__PURE__ */` annotations. Unreferenced tables and unused schemas within tables are automatically tree-shaken away by Rollup, Esbuild, or Rolldown during production builds.
-
-```ts
-import { usersInsertSchema, postsSelectSchema } from 'virtual:drizzle-zod';
-
-const newUser = usersInsertSchema.parse(formData);
-```
-
-### 2. Per-Table Sub-Module Imports
-
-You can also import directly from per-table sub-modules for granular scoping:
-
-```ts
-import { insertSchema, selectSchema, updateSchema } from 'virtual:drizzle-zod/users';
-
-const newUser = insertSchema.parse(formData);
-```
-
-## 🛠️ Schema Refinement (`refineSchema`)
-
-Drizzle-generated schemas reflect raw database column constraints. When building forms, UI inputs, or API boundaries, you often need **custom error messages**, **additional validation rules**, or **type extensions** without losing type safety or untouched fields.
-
-The `refineSchema` helper is exported directly by your virtual modules (or from `@omariyassine/drizzle-zod-plugin/refine` for standalone files):
-
-```ts
-import { insertSchema, refineSchema } from "virtual:drizzle-zod/usersTable";
-
-export const insertUserSchema = refineSchema(insertSchema, (fields) => ({
-  // 1. Override error messages on pre-existing checks (no duplicate validation chains)
-  email: fields.email.setError("Please provide a valid email address"),
-
-  // 2. Add extra validations (e.g., min age, regex, etc.)
-  age: fields.age.min(18, { error: "You must be at least 18 years old to register" }),
-
-  // 3. Extend unions, enums, or transformations
-  role: fields.role.or(z.literal("superadmin")),
-}));
-```
-
-### Key Capabilities
-
-- **`setError(message)` / `withError(message)`**: Overrides the error message on existing field checks without adding redundant rules.
-- **Transparent Optional & Nullable Handling**: You can call methods like `.min()`, `.max()`, or `.setError()` directly on optional or nullable fields without manually unwrapping and re-wrapping `.optional()` / `.nullable()`.
-- **Full TypeScript Type Safety**: Preserves the exact inferred types of all untouched fields while accurately typing modified fields.
-
-## 🎛️ Plugin Options
-
-| Option | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `schemaPath` | `string` | *(Optional)* | Path to your server Drizzle schema file. Auto-detected from `drizzle.config.ts` if omitted. |
-| `tables` | `string[]` | *Auto-detected* | Table export names to include |
-| `moduleId` | `string` | `'virtual:drizzle-zod'` | Base virtual module specifier |
-| `outputPath` | `string` | *Internal* | Path to write generated files for inspection. Omitted by default — types remain internal. |
-| `splitByTable` | `boolean` | `true` | When `true`, generates individual per-table files plus a barrel `index.ts`. |
-| `noCache` | `boolean` | `false` | Disable in-memory result caching. |
-
-## 💻 CLI Usage (`vdz`)
-
-You can generate standalone Zod validation schemas on demand via the CLI, bypassing all caching mechanisms:
+## Development
 
 ```bash
-# Using bunx or npx
-bunx vdz generate
-npx vdz generate
-
-# Or run directly (defaults to generate)
-bunx vdz
+bun install              # links the workspace (demo imports the package via workspace:*)
+bun test                 # run the package test suite
+bun run build            # build the package dist
+bun run typecheck        # typecheck all workspaces
 ```
 
-### CLI Options
-
-```bash
-vdz generate [options]
-
-Options:
-  -s, --schema <path>      Path to Drizzle schema file (auto-detects from drizzle.config.* if omitted)
-  -o, --output <path>      Output directory or file path for generated schemas (default: ./validators)
-  -t, --tables <names>     Comma-separated list of table names to include
-  --split                  Generate separate files per table (default: true)
-  --no-split               Generate all schemas in a single file
-  -m, --module-id <id>     Virtual module ID (default: virtual:drizzle-zod)
-  -r, --root <path>        Project root directory (default: current working directory)
-  -c, --config <path>      Explicit path to drizzle.config file
-  -v, --version            Show version
-  -h, --help               Show help message
-```
-
-### Examples
-
-```bash
-# Generate schemas into ./validators (auto-detecting schema from drizzle.config.ts)
-bunx vdz generate
-
-# Generate into a custom folder
-bunx vdz generate --schema ./src/db/schema.ts --output ./src/validators
-
-# Generate all schemas into a single file
-bunx vdz generate --no-split --output ./src/validators.ts
-
-# Generate schemas only for specific tables
-bunx vdz generate --tables users,posts
-```
-
-## 📄 License
-
-[MIT](./LICENSE) © [Yassine Omari](https://github.com/omariyassinee)
-
+See [`packages/drizzle-validators/README.md`](./packages/drizzle-validators/README.md) for package docs.
