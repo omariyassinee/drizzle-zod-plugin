@@ -1,0 +1,24 @@
+{
+	"compilerOptions": {
+		"lib": ["ESNext", "DOM", "DOM.Iterable"],
+		"target": "ESNext",
+		"module": "Preserve",
+		"moduleDetection": "force",
+		"jsx": "react-jsx",
+		"allowJs": true,
+		"types": ["bun", "virtual-drizzle-validators"],
+		"moduleResolution": "bundler",
+		"allowImportingTsExtensions": true,
+		"verbatimModuleSyntax": true,
+		"noEmit": true,
+		"strict": true,
+		"skipLibCheck": true,
+		"noFallthroughCasesInSwitch": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"noUnusedLocals": false,
+		"noUnusedParameters": false,
+		"noPropertyAccessFromIndexSignature": false
+	},
+	"include": ["src/**/*", "tests/**/*", "vite.config.ts", "drizzle.config.ts"]
+}

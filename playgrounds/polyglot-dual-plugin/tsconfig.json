@@ -1,0 +1,13 @@
+{
+	"compilerOptions": {
+		"strict": true,
+		"noEmit": true,
+		"module": "preserve",
+		"moduleResolution": "bundler",
+		"allowImportingTsExtensions": true,
+		"target": "esnext",
+		"skipLibCheck": true,
+		"types": ["bun", "virtual-validators-zod", "virtual-validators-valibot"]
+	},
+	"include": ["src", "tests", "vite.config.ts"]
+}

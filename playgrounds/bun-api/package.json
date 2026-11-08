@@ -1,0 +1,22 @@
+{
+	"name": "@vacuus/playground-bun-api",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"generate": "dv generate --schema ./src/db/schema.ts --output ./src/generated-validators --target zod",
+		"dev": "bun run generate && bun --watch src/server/index.ts",
+		"start": "bun run generate && bun src/server/index.ts",
+		"typecheck": "bun run generate && bun check",
+		"test": "bun run generate && bun test"
+	},
+	"dependencies": {
+		"@vacuus/drizzle-validators": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.14",
+		"esbuild": "^0.28.1",
+		"typescript": "^5.0.0"
+	}
+}

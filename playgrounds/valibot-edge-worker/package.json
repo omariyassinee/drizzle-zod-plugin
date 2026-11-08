@@ -1,0 +1,23 @@
+{
+	"name": "@vacuus/playground-valibot-edge-worker",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"generate": "dv generate --schema ./src/db/schema.ts --output ./src/generated-validators --tables webhooks,deliveries --target valibot",
+		"build": "bun run generate && vite build",
+		"typecheck": "bun run generate && bun check",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@vacuus/drizzle-validators": "workspace:*",
+		"drizzle-orm": "1.0.0-rc.5",
+		"valibot": "^1.0.0"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.3.14",
+		"esbuild": "^0.28.1",
+		"typescript": "^5.0.0",
+		"vite": "^8.2.0"
+	}
+}

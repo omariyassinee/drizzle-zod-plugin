@@ -1,0 +1,12 @@
+{
+	"compilerOptions": {
+		"strict": true,
+		"noEmit": true,
+		"module": "preserve",
+		"moduleResolution": "bundler",
+		"target": "esnext",
+		"skipLibCheck": true,
+		"types": ["bun"]
+	},
+	"include": ["src", "tests"]
+}
