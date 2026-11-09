@@ -30,7 +30,22 @@
 			"import": "./dist/refine/valibot.js",
 			"default": "./dist/refine/valibot.js"
 		},
-		"./package.json": "./package.json"
+		"./package.json": "./package.json",
+		"./predictions": {
+			"types": "./dist/predictions/index.d.ts",
+			"import": "./dist/predictions/index.js",
+			"default": "./dist/predictions/index.js"
+		},
+		"./predictions/valibot": {
+			"types": "./dist/predictions/valibot.d.ts",
+			"import": "./dist/predictions/valibot.js",
+			"default": "./dist/predictions/valibot.js"
+		},
+		"./predictions/typebox": {
+			"types": "./dist/predictions/typebox.d.ts",
+			"import": "./dist/predictions/typebox.js",
+			"default": "./dist/predictions/typebox.js"
+		}
 	},
 	"publishConfig": {
 		"access": "public"

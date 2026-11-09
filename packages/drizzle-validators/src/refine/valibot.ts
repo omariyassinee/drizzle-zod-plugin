@@ -15,3 +15,5 @@ export {
 	type VErrorMessage,
 } from "../valibot-refine";
 export type { FieldErrorMapV } from "../valibot-error-map";
+
+export { predictedVKeys, predictedVKeysObject, errorsOfV } from "../predictions/valibot";

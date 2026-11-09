@@ -358,7 +358,10 @@ function setErrorOnField(field: z.ZodTypeAny, error: string): z.ZodTypeAny {
 	return cloneSchemaWithDef(field, overrides, "error override");
 }
 
-type DeepUnwrap<T extends z.ZodTypeAny> =
+export type DeepUnwrap<T extends z.ZodTypeAny> =
+	T extends z.ZodExactOptional<infer Inner extends z.ZodTypeAny>
+		? DeepUnwrap<Inner>
+		:
 	T extends z.ZodOptional<infer Inner extends z.ZodTypeAny>
 		? DeepUnwrap<Inner>
 		: T extends z.ZodNullable<infer Inner extends z.ZodTypeAny>
@@ -762,3 +765,20 @@ export function refineZSchema(
 
 	return rebuildZodObject(baseSchema, nextShape);
 }
+
+export {
+	predictedKeys,
+	predictedKeysObject,
+	errorsOf,
+	type PredictedIssue,
+	type ObjectPredictedIssues,
+	type FieldErrorRecord,
+	type PredictedErrorKeys,
+	type SchemaPredictedErrorKeys,
+	type SchemaErrorRecord,
+	type PortableErrorKey,
+	type KeyConstraintMeta,
+	type CoreTypeDescriptor,
+	type PredictOptions,
+	type ErrorsOfOptions,
+} from "./predictions";

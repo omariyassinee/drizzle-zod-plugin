@@ -1,7 +1,17 @@
 import { expect, test, afterAll } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+
+import {
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	rmSync,
+	writeFileSync,
+	statSync,
+} from "node:fs";
+
 import { drizzleValidators } from "@vacuus/drizzle-validators";
+import { join } from "node:path";
+
 import type { Plugin } from "vite";
 
 // Hostile Schema: every fail-loud path, exercised from a real plugin
@@ -22,7 +32,10 @@ type TestPlugin = Plugin & {
 function plugin(schemaPath: string, options: Record<string, unknown> = {}) {
 	const p = drizzleValidators("zod", {
 		schemaPath,
-		outputPath: join(OUT, `${schemaPath.split("/").pop()}-${Math.random().toString(36).slice(2, 7)}`),
+		outputPath: join(
+			OUT,
+			`${schemaPath.split("/").pop()}-${Math.random().toString(36).slice(2, 7)}`,
+		),
 		...options,
 	}) as unknown as TestPlugin;
 	p.configResolved({ root: ROOT, command: "serve" });
@@ -120,7 +133,9 @@ test("unknown --tables entry fails loud naming the entry", async () => {
 test("schema: string[] drizzle config fails loud (C3, via CLI -c)", () => {
 	writeFileSync(
 		join(SCHEMAS, "array-config.json"),
-		JSON.stringify({ schema: ["./tmp-schemas/plain.ts", "./tmp-schemas/empty.ts"] }),
+		JSON.stringify({
+			schema: ["./tmp-schemas/plain.ts", "./tmp-schemas/empty.ts"],
+		}),
 	);
 	const proc = Bun.spawnSync(
 		[
@@ -177,7 +192,10 @@ test("last-good-wins: failed regeneration leaves prior artifacts untouched", asy
 	const tableFile = join(outDir, "accounts.ts");
 	expect(existsSync(tableFile)).toBe(true);
 	// a useCache instance also warms its in-memory cache (rewrites files)
-	const cached = plugin(schemaPath, { outputPath: "tmp-out/atomic", useCache: true });
+	const cached = plugin(schemaPath, {
+		outputPath: "tmp-out/atomic",
+		useCache: true,
+	});
 	const beforeVirtualCode = await cached.load("\0virtual:drizzle-validators");
 	const before = Math.floor(statSync(tableFile).mtimeMs);
 	const beforeContent = await Bun.file(tableFile).text();
@@ -222,7 +240,9 @@ test("a first-ever failed generation writes no partial artifacts", async () => {
 	rmSync(outDir, { recursive: true, force: true });
 	const p = plugin(schemaPath, { outputPath: "tmp-out/fresh-fail" });
 
-	await expect(p.load("\0virtual:drizzle-validators")).rejects.toThrow(/z\.instanceof\(Buffer\)/);
+	await expect(p.load("\0virtual:drizzle-validators")).rejects.toThrow(
+		/z\.instanceof\(Buffer\)/,
+	);
 
 	// no output dir (or at most an empty shell) — nothing that looks generated
 	if (existsSync(outDir)) {

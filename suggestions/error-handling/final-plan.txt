@@ -1,0 +1,1356 @@
+Final Architecture & Implementation Plan: Error-Type Predictions for Refined Schemas
+Target Package: @vacuus/drizzle-validators (v0.1.32) Target Files: src/predictions/core.ts (new), src/predictions/types.ts (new), src/predictions/zod.ts (new), src/predictions/valibot.ts (new), src/predictions/typebox.ts (new), src/predictions/index.ts (new), src/error-map.ts, src/valibot-error-map.ts, src/refine.ts, package.json Validator Baseline: zod@^4.4.3 (peer ^4.0.0-0) · valibot@^1.5.0 (peer ^1.0.0) · typebox@1.1.0 Core Invariants: G0 Zero Refinement Behavior Change · C1 Non-Contamination · G1 Exact Runtime Inverse · G5 Subpath Tree-Shaking Purity (< 120 KB)
+0. Executive Summary & Architectural Reconciliations
+@vacuus/drizzle-validators currently dispatches runtime validation issues to declarative error-map keys in the forward direction (issue => candidateKeys) via src/error-map.ts (Zod) and src/valibot-error-map.ts (Valibot), alongside compile-time core-type key constraints via FieldErrorMapForCore<TCore> in src/refine.ts. This specification delivers the inverse, bidirectional prediction and structured-extraction layer across all three validator targets:
+1. Runtime Schema Introspection (predictedKeys, predictedVKeys, predictedTKeys): Given any base or refined field/object schema, returns the exact, deduplicated, deterministically ordered set of error keys (PredictedIssue) and static constraint metadata (meta) that the field can emit.
+2. Structured Issue Extraction (errorsOf, errorsOfV): Parses an input against a schema and transforms raw library issues into flat, JSON-serializable FieldErrorRecord objects ({ field, path, kind, candidates, message, ctx, input }) where kind is guaranteed to be a member of predictedKeys(field).keys.
+3. Compile-Time Error Key Extraction (PredictedErrorKeys<TField>, SchemaErrorRecord<TSchema>): Extracts the narrowest sound string-literal union of error keys for a field or table schema at compile time, enabling exhaustive switch (err.kind) narrowing in UI form controllers and API handlers.
+0.1 Technical Corrections Applied to Earlier Drafts
+
+#
+Flaw in Draft Plan
+Verified Codebase & Validator Reality
+Final Architecture Resolution
+1
+§5.1 claimed integer schemas predict ["int"] and never "invalid_type"
+In src/error-map.ts, candidateKeys routes to ["int"] only when typeof issue.input === "number" (e.g. 15.5). Passing "abc" or {} to z.int() or z.number().int() emits code: "invalid_type" with a non-number input, which dispatches to ["invalid_type"].
+Integer schemas retain "invalid_type" in their core key set (for non-number inputs) and emit "int" for non-integer numeric inputs, plus "min"/"max"/"too_small"/"too_big" when range checks (.gte()/.lte()) are present.
+2
+§3.5 / §6.2 proposed CheckProbeKeys<T> and { predictions: true } on refineZSchema
+In Zod 4, chaining check methods (.min(), .max(), .regex(), .multipleOf()) appends to _zod.def.checks at runtime without changing the static TypeScript type (z.ZodString remains z.ZodString).
+Drop fictitious CheckProbeKeys<T> and the redundant { predictions: true } overload flag. Define PredictedErrorKeys<TField> directly as Exclude<keyof FieldErrorMapForCore<DeepUnwrap<TField>>, "default">, and provide SchemaErrorRecord<TSchema> for discriminated per-field narrowing.
+3
+§3.4 / §4.4 assumed TypeBox schemas always expose [Kind] symbols
+As verified in multi-validator-support.md (§4.1), drizzle-orm/typebox outputs plain JSON Schema objects without [Kind] symbols, whereas user-constructed t.* schemas carry [Kind].
+predictedTKeys introspects standard JSON Schema properties (type, format, minLength, maxLength, minimum, maximum, exclusiveMinimum, exclusiveMaximum, multipleOf, pattern, anyOf, enum, properties, required) directly, using [Kind] only as a secondary fallback.
+4
+§4.3 left FieldErrorRecord.kind vs. candidateKeys array resolution ambiguous
+candidateKeys(issue, site) returns an ordered specificity cascade (e.g. ["min_length", "min", "too_small"] or ["uuidv4", "uuid", "format", "invalid_format"]), not a single string.
+FieldErrorRecord sets kind: candidates[0] (the most specific key) and exposes candidates: readonly string[] (the full cascade). Both kind and every element of candidates are guaranteed to exist in predictedKeys(field).keys.
+5
+§4.3 / §14 conflated static schema meta with runtime errorsOf ctx
+Zod 4 and Valibot 1.5 attach the exact failing parameters (minimum, maximum, exact, format, divisor, expected, received) directly onto the runtime issue object during safeParse.
+predictedKeys extracts static meta from the schema AST without parsing; errorsOf extracts ctx directly from the runtime issue payload and resolves SiteMeta from issue.inst (with path-walk fallback to the field schema).
+6
+§7 positioned dv predict as a complete form-error contract
+Build-time CLI/Vite generation only sees base Drizzle tables; all .as(), .min(), .required(), and virtual fields occur at runtime inside refineSchema.
+Scope predictedKeysObject(schema) as a runtime table-surface helper that works on refined schemas, and demote dv predict to an optional base-table CLI dump.
+1. Core Prediction Model & Shared Dispatch Table
+1.1 Shared Primitives (src/predictions/core.ts)
+To prevent drift between forward runtime error mapping (error-map.ts / valibot-error-map.ts) and reverse schema prediction (predictions/*.ts), all key sets, format parent mappings, and issue-to-key resolution functions are centralized in src/predictions/core.ts.
+
+TypeScript
+// packages/drizzle-validators/src/predictions/core.ts
+import { STRING_FORMAT_NAMES, type StringFormat } from "../constants";
+
+export type PortableErrorKey =
+  | "required"
+  | "null"
+  | "invalid_type"
+  | "invalid_value"
+  | "min"
+  | "max"
+  | "min_length"
+  | "max_length"
+  | "length"
+  | "too_small"
+  | "too_big"
+  | "int"
+  | "multiple_of"
+  | "not_multiple_of"
+  | "format"
+  | "invalid_format"
+  | "regex"
+  | "starts_with"
+  | "ends_with"
+  | "includes"
+  | "custom"
+  | "unrecognized_keys"
+  | "invalid_union"
+  | StringFormat;
+
+export interface KeyConstraintMeta {
+  minimum?: number | bigint | Date;
+  maximum?: number | bigint | Date;
+  inclusive?: boolean;
+  exact?: number;
+  multipleOf?: number | bigint;
+  format?: string;
+  pattern?: string;
+  prefix?: string;
+  suffix?: string;
+  includes?: string;
+  values?: readonly unknown[];
+}
+
+export interface CoreTypeDescriptor {
+  type: string;
+  format?: string;
+  optional: boolean;
+  nullable: boolean;
+  sizedOrigin: boolean;
+  intCheck: boolean;
+  isEnum: boolean;
+  isObject: boolean;
+  isStrictObject: boolean;
+  isUnion: boolean;
+}
+
+export interface PredictedIssue<K extends string = PortableErrorKey> {
+  /** Ordered, deduplicated error keys (core presence/type keys first, then check keys in attachment order). */
+  readonly keys: readonly K[];
+  /** Static constraint metadata keyed by predicted error key. */
+  readonly meta: Readonly<Partial<Record<K, Readonly<KeyConstraintMeta>>>>;
+  /** Structural descriptor of the unwrapped core schema and its outer wrappers. */
+  readonly coreType: Readonly<CoreTypeDescriptor>;
+}
+
+export type ObjectPredictedIssues<TShape extends Record<string, any> = Record<string, any>> = {
+  readonly [K in keyof TShape]: PredictedIssue;
+};
+
+export interface FieldErrorRecord<
+  TField extends string = string,
+  TKind extends string = PortableErrorKey,
+> {
+  /** Top-level field name, or dot-joined path for nested fields (e.g. "address.city" or "tags.0"). */
+  field: TField;
+  /** Raw property path segments from the validator issue. */
+  path: (string | number)[];
+  /** Most specific portable error key (always equals candidates[0] and is in predictedKeys(field).keys). */
+  kind: TKind;
+  /** Full specificity cascade from most specific to coarse fallback (e.g. ["min_length", "min", "too_small"]). */
+  candidates: readonly TKind[];
+  /** Final resolved human-readable error message. */
+  message: string;
+  /** Normalized runtime issue parameters (minimum, maximum, format, multipleOf, expected, received). */
+  ctx?: Readonly<Record<string, unknown>>;
+  /** Offending input value when provided by the validator engine. */
+  input?: unknown;
+}
+
+export interface PredictOptions {
+  /** Include core presence/type keys (required, null, invalid_type, invalid_value, etc.). @default true */
+  includeCore?: boolean;
+  /** Include check/pipe-derived constraint keys (min, max, format, email, int, etc.). @default true */
+  includeChecks?: boolean;
+}
+
+export interface ErrorsOfOptions<TErrorMap = unknown> {
+  /** Emit only the first FieldErrorRecord per unique `field` path. @default false */
+  sparse?: boolean;
+  /** Optional declarative SchemaErrorMap to resolve custom messages on the fly without re-cloning the schema. */
+  errorMap?: TErrorMap;
+}
+
+/** Parent format fallback when a versioned/protocol format key is not explicitly set. */
+export const FORMAT_PARENT: Readonly<Record<string, PortableErrorKey>> = {
+  uuidv4: "uuid",
+  uuidv6: "uuid",
+  uuidv7: "uuid",
+  httpUrl: "url",
+};
+
+export const SPECIFIC_FORMAT_KEYS: ReadonlySet<string> = new Set<string>([
+  "regex",
+  "starts_with",
+  "ends_with",
+  "includes",
+  ...STRING_FORMAT_NAMES,
+]);
+
+export const SIZED_ORIGIN_TYPES: ReadonlySet<string> = new Set<string>([
+  "string",
+  "array",
+  "set",
+]);
+
+/** Expands a canonical format name into its ordered specificity cascade. */
+export function expandFormatCascade(formatName: string): PortableErrorKey[] {
+  const keys: PortableErrorKey[] = [];
+  if (SPECIFIC_FORMAT_KEYS.has(formatName)) {
+    keys.push(formatName as PortableErrorKey);
+    const parent = FORMAT_PARENT[formatName];
+    if (parent) keys.push(parent);
+  }
+  keys.push("format", "invalid_format");
+  return keys;
+}
+
+/** Expands a minimum bound check into its ordered specificity cascade. */
+export function expandMinCascade(sizedOrigin: boolean): PortableErrorKey[] {
+  return sizedOrigin
+    ? ["min_length", "min", "too_small"]
+    : ["min", "too_small"];
+}
+
+/** Expands a maximum bound check into its ordered specificity cascade. */
+export function expandMaxCascade(sizedOrigin: boolean): PortableErrorKey[] {
+  return sizedOrigin
+    ? ["max_length", "max", "too_big"]
+    : ["max", "too_big"];
+}
+
+/** Expands an exact length check into its ordered specificity cascade. */
+export function expandLengthCascade(): PortableErrorKey[] {
+  return ["length", "too_small", "too_big"];
+}
+
+/** Expands a multipleOf check into its ordered specificity cascade. */
+export function expandMultipleOfCascade(): PortableErrorKey[] {
+  return ["multiple_of", "not_multiple_of"];
+}
+
+/** Full fallback key set for opaque/unknown schema cores (guarantees soundness). */
+export const ALL_PORTABLE_KEYS: readonly PortableErrorKey[] = Object.freeze([
+  "required",
+  "null",
+  "invalid_type",
+  "invalid_value",
+  "min_length",
+  "max_length",
+  "length",
+  "min",
+  "max",
+  "too_small",
+  "too_big",
+  "int",
+  "multiple_of",
+  "not_multiple_of",
+  ...STRING_FORMAT_NAMES,
+  "regex",
+  "starts_with",
+  "ends_with",
+  "includes",
+  "format",
+  "invalid_format",
+  "custom",
+  "unrecognized_keys",
+  "invalid_union",
+]);
+
+2. Exact Key-Set Semantics & Golden Rules
+Every prediction walker (predictedKeys, predictedVKeys, predictedTKeys) implements the following eight deterministic rules so runtime dispatch and static prediction are exact inverses:
+1. Wrapper-Aware Presence Keys (required, null):
+  * unwrapAll (Zod), unwrapAllV (Valibot), and unwrapTypeBox peel outer wrapper layers to inspect whether undefined and null are accepted before reaching the core.
+  * required is emitted iff the outer wrapper stack does not include optional, exactOptional, nullish, default, or catch.
+  * null is emitted iff the outer wrapper stack does not include nullable, nullish, or catch.
+  * Chaining .required(), .nonnullable(), or .unwrap() inside refineSchema updates the wrapper stack prior to prediction, so predictedKeys reflects the post-refinement presence contract.
+2. Integer vs. Invalid Type (int vs. invalid_type):
+  * A numeric schema with integer constraint (z.int(), z.number().int(), Valibot v.integer(), TypeBox t.Integer()) emits "invalid_type" in coreKeys (triggered when input is not a number, e.g., "abc") and "int" in checkKeys (triggered when input is a float, e.g., 15.5).
+  * Attached range checks (e.g., Drizzle's int32 .gte(-2147483648).lte(2147483647)) additionally contribute ["min", "too_small"] and ["max", "too_big"].
+3. Sized-Origin Bound Discrimination (min_length/max_length vs. min/max):
+  * When the core type is "string", "array", or "set" (or the check kind is min_length/max_length), minimum checks emit ["min_length", "min", "too_small"] and maximum checks emit ["max_length", "max", "too_big"].
+  * When the core type is "number", "bigint", or "date", minimum checks emit ["min", "too_small"] and maximum checks emit ["max", "too_big"].
+  * Exact-length checks (length_equals / v.length(n)) emit ["length", "too_small", "too_big"].
+4. Format Resolution & Parent Cascades:
+  * Canonical format names are resolved via resolveStringFormatName(def) (src/format-names.ts), mapping { format: "uuid", version: "v4" } to "uuidv4" and { format: "url", protocol } to "httpUrl".
+  * Any format check (either top-level z.email() / z.uuidv4() or check-level .regex() / .email()) emits expandFormatCascade(formatName): [<formatName>, <parentFormat?>, "format", "invalid_format"].
+  * A plain z.string() / v.string() / t.String() with no format check never predicts "format" or "invalid_format".
+5. Choice, Union, and Object Cores:
+  * enum, literal, and picklist cores emit "invalid_value" alongside "invalid_type" (and extract meta.invalid_value = { values }).
+  * union, discriminatedUnion, and variant cores emit "invalid_union" alongside "invalid_type".
+  * object cores with strict unknown-key policy (catchallDef?.type === "never" in Zod, strict_object in Valibot, additionalProperties: false in TypeBox) emit "unrecognized_keys".
+6. Non-Validating Transforms (overwrite):
+  * Checks with checkDef.check === "overwrite" (.trim(), .toLowerCase(), .toUpperCase()) and Valibot "transformation" actions never emit validation issues and contribute zero keys.
+7. Custom Refinements:
+  * .refine(), .superRefine(), .check(fn) in Zod and check / raw_check / partial_check in Valibot emit ["custom"].
+8. Deduplication & Ordering:
+  * Keys are accumulated into a Set<PortableErrorKey> preserving insertion order: coreKeys (required, null, invalid_type, invalid_value / invalid_union / unrecognized_keys, top-level format/int) followed by checkKeys in the exact order checks/actions appear on the schema.
+  * Unknown or opaque cores (any, unknown, custom, lazy, unrecognized defs) return ALL_PORTABLE_KEYS so prediction is total and never under-predicts.
+3. Runtime Walkers & Structured Error Extraction
+3.1 Zod Walker & errorsOf (src/predictions/zod.ts)
+
+TypeScript
+// packages/drizzle-validators/src/predictions/zod.ts
+import type { z } from "zod";
+import { resolveStringFormatName } from "../format-names";
+import {
+  applyErrorMapToCore,
+  candidateKeys,
+  normalizeEntry,
+  siteOf,
+} from "../error-map";
+import { unwrapAll } from "../refine";
+import { getZodDef, UNWRAP_PROXY, type InternalZodDef } from "../zod-compat";
+import {
+  ALL_PORTABLE_KEYS,
+  expandFormatCascade,
+  expandLengthCascade,
+  expandMaxCascade,
+  expandMinCascade,
+  expandMultipleOfCascade,
+  SIZED_ORIGIN_TYPES,
+  type CoreTypeDescriptor,
+  type ErrorsOfOptions,
+  type FieldErrorRecord,
+  type KeyConstraintMeta,
+  type ObjectPredictedIssues,
+  type PortableErrorKey,
+  type PredictedIssue,
+  type PredictOptions,
+} from "./core";
+
+const KNOWN_ZOD_CORES = new Set([
+  "string",
+  "number",
+  "bigint",
+  "boolean",
+  "date",
+  "array",
+  "set",
+  "tuple",
+  "record",
+  "enum",
+  "literal",
+  "object",
+  "union",
+  "discriminatedUnion",
+  "null",
+  "undefined",
+  "void",
+  "never",
+]);
+
+function assignMeta(
+  meta: Record<string, KeyConstraintMeta>,
+  keys: readonly PortableErrorKey[],
+  value: KeyConstraintMeta,
+): void {
+  for (const k of keys) {
+    meta[k] = { ...meta[k], ...value };
+  }
+}
+
+/**
+* Introspects a single Zod field schema (unwrapping proxies and optional/nullable/default/catch/readonly layers)
+* and returns the exact ordered set of error keys it can emit alongside static constraint metadata.
+*/
+export function predictedKeys(
+  field: z.ZodTypeAny,
+  options?: PredictOptions,
+): PredictedIssue {
+  const includeCore = options?.includeCore ?? true;
+  const includeChecks = options?.includeChecks ?? true;
+
+  const rawField = ((field as any)?.[UNWRAP_PROXY] ?? field) as z.ZodTypeAny;
+  const { core, wrappers } = unwrapAll(rawField);
+  const def = getZodDef(core);
+
+  const optional = wrappers.some(
+    (w) =>
+      w.type === "optional" ||
+      w.type === "exactOptional" ||
+      w.type === "default" ||
+      w.type === "catch",
+  );
+  const nullable = wrappers.some(
+    (w) => w.type === "nullable" || w.type === "catch",
+  );
+
+  if (!def || !KNOWN_ZOD_CORES.has(def.type)) {
+    return {
+      keys: includeCore ? ALL_PORTABLE_KEYS : [],
+      meta: Object.freeze({}),
+      coreType: Object.freeze({
+        type: def?.type ?? "unknown",
+        optional,
+        nullable,
+        sizedOrigin: false,
+        intCheck: false,
+        isEnum: false,
+        isObject: false,
+        isStrictObject: false,
+        isUnion: false,
+      }),
+    };
+  }
+
+  const coreTypeStr = def.type;
+  const sizedOrigin = SIZED_ORIGIN_TYPES.has(coreTypeStr);
+  const topFormat =
+    coreTypeStr === "string" && typeof def.format === "string"
+      ? resolveStringFormatName(def)
+      : undefined;
+  const topInt =
+    coreTypeStr === "number" && /int/i.test(String(def.format ?? ""));
+  const isEnum = coreTypeStr === "enum" || coreTypeStr === "literal";
+  const isObject = coreTypeStr === "object";
+  const catchallDef =
+    isObject && def.catchall ? getZodDef(def.catchall) : undefined;
+  const isStrictObject = isObject && catchallDef?.type === "never";
+  const isUnion =
+    coreTypeStr === "union" || coreTypeStr === "discriminatedUnion";
+
+  const keySet = new Set<PortableErrorKey>();
+  const meta: Record<string, KeyConstraintMeta> = {};
+
+  let hasIntCheck = topInt;
+
+  if (includeCore) {
+    if (!optional && coreTypeStr !== "undefined" && coreTypeStr !== "void") {
+      keySet.add("required");
+    }
+    if (!nullable && coreTypeStr !== "null") {
+      keySet.add("null");
+    }
+    if (isEnum) {
+      keySet.add("invalid_value");
+      keySet.add("invalid_type");
+      const values = Array.isArray((def as any).values)
+        ? (def as any).values
+        : (def as any).entries
+          ? Object.values((def as any).entries)
+          : undefined;
+      if (values) meta.invalid_value = { values };
+    } else if (isUnion) {
+      keySet.add("invalid_union");
+      keySet.add("invalid_type");
+    } else {
+      keySet.add("invalid_type");
+    }
+
+    if (isStrictObject) {
+      keySet.add("unrecognized_keys");
+    }
+  }
+
+  if (includeChecks) {
+    // Top-level Zod 4 format / integer primitives (e.g. z.email(), z.uuidv4(), z.int())
+    if (topFormat) {
+      const cascade = expandFormatCascade(topFormat);
+      for (const k of cascade) keySet.add(k);
+      assignMeta(meta, cascade, { format: topFormat });
+    }
+    if (topInt) {
+      keySet.add("int");
+    }
+
+    if (Array.isArray(def.checks)) {
+      for (const check of def.checks) {
+        const checkDef = getZodDef(check);
+        if (!checkDef || typeof checkDef.check !== "string") continue;
+
+        switch (checkDef.check) {
+          case "overwrite":
+            break;
+          case "min_length": {
+            const cascade = expandMinCascade(true);
+            for (const k of cascade) keySet.add(k);
+            if (checkDef.minimum !== undefined) {
+              assignMeta(meta, cascade, {
+                minimum: checkDef.minimum as number,
+                inclusive: true,
+              });
+            }
+            break;
+          }
+          case "max_length": {
+            const cascade = expandMaxCascade(true);
+            for (const k of cascade) keySet.add(k);
+            if (checkDef.maximum !== undefined) {
+              assignMeta(meta, cascade, {
+                maximum: checkDef.maximum as number,
+                inclusive: true,
+              });
+            }
+            break;
+          }
+          case "length_equals": {
+            const cascade = expandLengthCascade();
+            for (const k of cascade) keySet.add(k);
+            if (checkDef.length !== undefined) {
+              assignMeta(meta, cascade, { exact: checkDef.length as number });
+            }
+            break;
+          }
+          case "greater_than": {
+            const cascade = expandMinCascade(sizedOrigin);
+            for (const k of cascade) keySet.add(k);
+            if (checkDef.value !== undefined) {
+              assignMeta(meta, cascade, {
+                minimum: checkDef.value as number | bigint | Date,
+                inclusive: Boolean(checkDef.inclusive ?? true),
+              });
+            }
+            break;
+          }
+          case "less_than": {
+            const cascade = expandMaxCascade(sizedOrigin);
+            for (const k of cascade) keySet.add(k);
+            if (checkDef.value !== undefined) {
+              assignMeta(meta, cascade, {
+                maximum: checkDef.value as number | bigint | Date,
+                inclusive: Boolean(checkDef.inclusive ?? true),
+              });
+            }
+            break;
+          }
+          case "multiple_of": {
+            const cascade = expandMultipleOfCascade();
+            for (const k of cascade) keySet.add(k);
+            if (checkDef.value !== undefined) {
+              assignMeta(meta, cascade, {
+                multipleOf: checkDef.value as number | bigint,
+              });
+            }
+            break;
+          }
+          case "number_format": {
+            if (/int/i.test(String(checkDef.format ?? ""))) {
+              hasIntCheck = true;
+              keySet.add("int");
+            }
+            break;
+          }
+          case "string_format": {
+            const fmt = resolveStringFormatName(checkDef);
+            if (fmt) {
+              const cascade = expandFormatCascade(fmt);
+              for (const k of cascade) keySet.add(k);
+              const fmtMeta: KeyConstraintMeta = { format: fmt };
+              if (checkDef.pattern instanceof RegExp) {
+                fmtMeta.pattern = checkDef.pattern.source;
+              }
+              if (typeof checkDef.prefix === "string") {
+                fmtMeta.prefix = checkDef.prefix;
+              }
+              if (typeof checkDef.suffix === "string") {
+                fmtMeta.suffix = checkDef.suffix;
+              }
+              if (typeof checkDef.includes === "string") {
+                fmtMeta.includes = checkDef.includes;
+              }
+              assignMeta(meta, cascade, fmtMeta);
+            }
+            break;
+          }
+          case "custom": {
+            keySet.add("custom");
+            break;
+          }
+          default:
+            break;
+        }
+      }
+    }
+  }
+
+  const coreType: CoreTypeDescriptor = Object.freeze({
+    type: coreTypeStr,
+    ...(topFormat ? { format: topFormat } : {}),
+    optional,
+    nullable,
+    sizedOrigin,
+    intCheck: hasIntCheck,
+    isEnum,
+    isObject,
+    isStrictObject,
+    isUnion,
+  });
+
+  return {
+    keys: Object.freeze(Array.from(keySet)),
+    meta: Object.freeze(meta),
+    coreType,
+  };
+}
+
+/**
+* Predicts the error surface for every field of a ZodObject schema.
+*/
+export function predictedKeysObject<T extends z.ZodObject<any>>(
+  schema: T,
+  options?: PredictOptions,
+): ObjectPredictedIssues<T["shape"]> {
+  const out: Record<string, PredictedIssue> = {};
+  for (const [key, field] of Object.entries(schema.shape)) {
+    out[key] = predictedKeys(field as z.ZodTypeAny, options);
+  }
+  return Object.freeze(out) as ObjectPredictedIssues<T["shape"]>;
+}
+
+Structured Issue Extraction (errorsOf)
+To guarantee that FieldErrorRecord.kind is always a member of predictedKeys(field).keys and that SiteMeta is accurately resolved even when issue.inst is absent or points to a check, errorsOf resolves the target field schema along issue.path and inspects getZodDef(issue.inst) ?? getZodDef(core):
+
+TypeScript
+function resolveFieldSchemaAtPath(
+  rootSchema: z.ZodObject<any>,
+  path: PropertyKey[],
+): z.ZodTypeAny | undefined {
+  let current: z.ZodTypeAny | undefined = rootSchema;
+  for (const segment of path) {
+    if (!current) return undefined;
+    const { core } = unwrapAll(current);
+    const def = getZodDef(core);
+    if (!def) return undefined;
+    if (def.type === "object" && def.shape && typeof segment === "string") {
+      current = def.shape[segment];
+    } else if (def.type === "array" && def.element && typeof segment === "number") {
+      current = def.element;
+    } else {
+      return core;
+    }
+  }
+  return current;
+}
+
+function extractIssueCtx(
+  issue: Record<string, any>,
+): Readonly<Record<string, unknown>> | undefined {
+  const ctx: Record<string, unknown> = {};
+  const keys = [
+    "minimum",
+    "maximum",
+    "inclusive",
+    "exact",
+    "format",
+    "pattern",
+    "prefix",
+    "suffix",
+    "includes",
+    "divisor",
+    "multipleOf",
+    "expected",
+    "values",
+    "keys",
+  ] as const;
+  for (const k of keys) {
+    if (issue[k] !== undefined) {
+      ctx[k === "divisor" ? "multipleOf" : k] = issue[k];
+    }
+  }
+  return Object.keys(ctx).length > 0 ? Object.freeze(ctx) : undefined;
+}
+
+export function errorsOf<T extends z.ZodObject<any>>(
+  schema: T,
+  input: unknown,
+  options?: ErrorsOfOptions,
+): FieldErrorRecord[] {
+  const parsed = schema.safeParse(input);
+  if (parsed.success) return [];
+
+  const seenFields = new Set<string>();
+  const records: FieldErrorRecord[] = [];
+
+  for (const rawIssue of parsed.error.issues) {
+    const issue = rawIssue as Record<string, any>;
+    const rawPath: PropertyKey[] = Array.isArray(issue.path) ? issue.path : [];
+    const path = rawPath
+      .filter((p): p is string | number => typeof p === "string" || typeof p === "number");
+    const field = path.length > 0 ? path.join(".") : "_root";
+
+    if (options?.sparse && seenFields.has(field)) {
+      continue;
+    }
+    seenFields.add(field);
+
+    const instDef = getZodDef(issue.inst);
+    const isCheck = Boolean(instDef && typeof instDef.check === "string" && instDef.type === undefined);
+    let site = instDef ? siteOf(instDef, isCheck) : undefined;
+
+    if (!site) {
+      const fieldSchema = resolveFieldSchemaAtPath(schema, rawPath);
+      const coreDef = fieldSchema ? getZodDef(unwrapAll(fieldSchema).core) : getZodDef(schema);
+      site = coreDef
+        ? siteOf(coreDef, false)
+        : { isCheck: false, intCheck: false, sizedOrigin: false, formatName: undefined };
+    }
+
+    const candidates = candidateKeys(issue, site) as PortableErrorKey[];
+    const fallbackCandidates: readonly PortableErrorKey[] =
+      candidates.length > 0 ? candidates : ["custom"];
+    const kind = fallbackCandidates[0]!;
+
+    const ctx = extractIssueCtx(issue);
+    records.push({
+      field,
+      path,
+      kind,
+      candidates: Object.freeze(fallbackCandidates),
+      message: String(issue.message ?? "Invalid input"),
+      ...(ctx ? { ctx } : {}),
+      ...("input" in issue ? { input: issue.input } : {}),
+    });
+  }
+
+  return records;
+}
+
+Note on src/error-map.ts Export: siteOf, candidateKeys, and SiteMeta in src/error-map.ts are promoted from module-private functions to named internal exports so src/predictions/zod.ts imports and executes the exact same functions used by runtime message dispatch.
+3.2 Valibot Walker & errorsOfV (src/predictions/valibot.ts)
+Valibot schemas store wrappers as outer schema nodes (type: "optional" | "nullable" | "nullish" | "exact_optional" | "non_optional" | "non_nullable" | "non_nullish", with inner schema at .wrapped) and constraints inside node.pipe.slice(1) where action.kind === "validation".
+
+TypeScript
+// packages/drizzle-validators/src/predictions/valibot.ts
+import { safeParse } from "valibot";
+import { candidateVKeys, unwrapAllV } from "../valibot-error-map";
+import {
+  ALL_PORTABLE_KEYS,
+  expandFormatCascade,
+  expandLengthCascade,
+  expandMaxCascade,
+  expandMinCascade,
+  expandMultipleOfCascade,
+  SIZED_ORIGIN_TYPES,
+  type CoreTypeDescriptor,
+  type ErrorsOfOptions,
+  type FieldErrorRecord,
+  type KeyConstraintMeta,
+  type ObjectPredictedIssues,
+  type PortableErrorKey,
+  type PredictedIssue,
+  type PredictOptions,
+} from "./core";
+
+const VALIBOT_FORMAT_MAP: Readonly<Record<string, string>> = {
+  email: "email",
+  url: "url",
+  uuid: "uuid",
+  cuid2: "cuid2",
+  ulid: "ulid",
+  nanoid: "nanoid",
+  ipv4: "ipv4",
+  ipv6: "ipv6",
+  base64: "base64",
+  emoji: "emoji",
+  regex: "regex",
+  starts_with: "starts_with",
+  ends_with: "ends_with",
+  includes: "includes",
+  iso_date: "date",
+  iso_time: "time",
+  iso_date_time: "datetime",
+  iso_timestamp: "datetime",
+};
+
+export function predictedVKeys(
+  field: unknown,
+  options?: PredictOptions,
+): PredictedIssue {
+  const includeCore = options?.includeCore ?? true;
+  const includeChecks = options?.includeChecks ?? true;
+
+  const { core, optional, nullable } = unwrapAllV(field as any);
+  const base =
+    core && Array.isArray((core as any).pipe) && (core as any).pipe.length > 0
+      ? (core as any).pipe[0]
+      : core;
+  const pipeActions: any[] =
+    core && Array.isArray((core as any).pipe) ? (core as any).pipe.slice(1) : [];
+
+  const coreTypeStr: string = typeof base?.type === "string" ? base.type : "unknown";
+  if (coreTypeStr === "unknown" || coreTypeStr === "any") {
+    return {
+      keys: includeCore ? ALL_PORTABLE_KEYS : [],
+      meta: Object.freeze({}),
+      coreType: Object.freeze({
+        type: coreTypeStr,
+        optional,
+        nullable,
+        sizedOrigin: false,
+        intCheck: false,
+        isEnum: false,
+        isObject: false,
+        isStrictObject: false,
+        isUnion: false,
+      }),
+    };
+  }
+
+  const sizedOrigin = SIZED_ORIGIN_TYPES.has(coreTypeStr);
+  const isEnum =
+    coreTypeStr === "picklist" ||
+    coreTypeStr === "enum" ||
+    coreTypeStr === "literal";
+  const isStrictObject = coreTypeStr === "strict_object";
+  const isObject =
+    coreTypeStr === "object" ||
+    coreTypeStr === "strict_object" ||
+    coreTypeStr === "loose_object" ||
+    coreTypeStr === "object_with_rest";
+  const isUnion = coreTypeStr === "union" || coreTypeStr === "variant";
+
+  const keySet = new Set<PortableErrorKey>();
+  const meta: Record<string, KeyConstraintMeta> = {};
+  let hasIntCheck = false;
+
+  if (includeCore) {
+    if (!optional) keySet.add("required");
+    if (!nullable) keySet.add("null");
+    if (isEnum) {
+      keySet.add("invalid_value");
+      keySet.add("invalid_type");
+      const values = Array.isArray(base.options)
+        ? base.options
+        : base.literal !== undefined
+          ? [base.literal]
+          : undefined;
+      if (values) meta.invalid_value = { values };
+    } else if (isUnion) {
+      keySet.add("invalid_union");
+      keySet.add("invalid_type");
+    } else {
+      keySet.add("invalid_type");
+    }
+    if (isStrictObject) {
+      keySet.add("unrecognized_keys");
+    }
+  }
+
+  if (includeChecks) {
+    for (const action of pipeActions) {
+      if (!action || action.kind !== "validation") continue;
+      const aType = String(action.type ?? "");
+
+      switch (aType) {
+        case "min_length": {
+          const cascade = expandMinCascade(true);
+          for (const k of cascade) keySet.add(k);
+          if (action.requirement !== undefined) {
+            for (const k of cascade) meta[k] = { minimum: action.requirement, inclusive: true };
+          }
+          break;
+        }
+        case "max_length": {
+          const cascade = expandMaxCascade(true);
+          for (const k of cascade) keySet.add(k);
+          if (action.requirement !== undefined) {
+            for (const k of cascade) meta[k] = { maximum: action.requirement, inclusive: true };
+          }
+          break;
+        }
+        case "length": {
+          const cascade = expandLengthCascade();
+          for (const k of cascade) keySet.add(k);
+          if (action.requirement !== undefined) {
+            for (const k of cascade) meta[k] = { exact: action.requirement };
+          }
+          break;
+        }
+        case "min_value":
+        case "gt_value": {
+          const cascade = expandMinCascade(sizedOrigin);
+          for (const k of cascade) keySet.add(k);
+          if (action.requirement !== undefined) {
+            for (const k of cascade) {
+              meta[k] = {
+                minimum: action.requirement,
+                inclusive: aType === "min_value",
+              };
+            }
+          }
+          break;
+        }
+        case "max_value":
+        case "lt_value": {
+          const cascade = expandMaxCascade(sizedOrigin);
+          for (const k of cascade) keySet.add(k);
+          if (action.requirement !== undefined) {
+            for (const k of cascade) {
+              meta[k] = {
+                maximum: action.requirement,
+                inclusive: aType === "max_value",
+              };
+            }
+          }
+          break;
+        }
+        case "multiple_of": {
+          const cascade = expandMultipleOfCascade();
+          for (const k of cascade) keySet.add(k);
+          if (action.requirement !== undefined) {
+            for (const k of cascade) meta[k] = { multipleOf: action.requirement };
+          }
+          break;
+        }
+        case "integer":
+        case "safe_integer": {
+          hasIntCheck = true;
+          keySet.add("int");
+          break;
+        }
+        case "check":
+        case "raw_check":
+        case "partial_check": {
+          keySet.add("custom");
+          break;
+        }
+        default: {
+          const mappedFormat = VALIBOT_FORMAT_MAP[aType];
+          if (mappedFormat) {
+            const cascade = expandFormatCascade(mappedFormat);
+            for (const k of cascade) keySet.add(k);
+            for (const k of cascade) {
+              meta[k] = {
+                format: mappedFormat,
+                ...(action.requirement instanceof RegExp
+                  ? { pattern: action.requirement.source }
+                  : {}),
+              };
+            }
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  const coreType: CoreTypeDescriptor = Object.freeze({
+    type: coreTypeStr,
+    optional,
+    nullable,
+    sizedOrigin,
+    intCheck: hasIntCheck,
+    isEnum,
+    isObject,
+    isStrictObject,
+    isUnion,
+  });
+
+  return {
+    keys: Object.freeze(Array.from(keySet)),
+    meta: Object.freeze(meta),
+    coreType,
+  };
+}
+
+export function errorsOfV(
+  schema: any,
+  input: unknown,
+  options?: ErrorsOfOptions,
+): FieldErrorRecord[] {
+  const result = safeParse(schema, input);
+  if (result.success) return [];
+
+  const seenFields = new Set<string>();
+  const records: FieldErrorRecord[] = [];
+
+  for (const issue of result.issues) {
+    const path: (string | number)[] = Array.isArray(issue.path)
+      ? issue.path
+          .map((p: any) => p?.key)
+          .filter((k: unknown): k is string | number => typeof k === "string" || typeof k === "number")
+      : [];
+    const field = path.length > 0 ? path.join(".") : "_root";
+
+    if (options?.sparse && seenFields.has(field)) {
+      continue;
+    }
+    seenFields.add(field);
+
+    const candidates = candidateVKeys(issue as any) as PortableErrorKey[];
+    const fallbackCandidates: readonly PortableErrorKey[] =
+      candidates.length > 0 ? candidates : ["custom"];
+    const kind = fallbackCandidates[0]!;
+
+    const ctx: Record<string, unknown> = {};
+    if (issue.requirement !== undefined) {
+      if (issue.type === "min_length" || issue.type === "min_value" || issue.type === "gt_value") {
+        ctx.minimum = issue.requirement;
+      } else if (issue.type === "max_length" || issue.type === "max_value" || issue.type === "lt_value") {
+        ctx.maximum = issue.requirement;
+      } else if (issue.type === "length") {
+        ctx.exact = issue.requirement;
+      } else if (issue.type === "multiple_of") {
+        ctx.multipleOf = issue.requirement;
+      } else {
+        ctx.requirement = issue.requirement;
+      }
+    }
+    if (issue.expected !== undefined) ctx.expected = issue.expected;
+    if (issue.received !== undefined) ctx.received = issue.received;
+
+    records.push({
+      field,
+      path,
+      kind,
+      candidates: Object.freeze(fallbackCandidates),
+      message: String(issue.message ?? "Invalid input"),
+      ...(Object.keys(ctx).length > 0 ? { ctx: Object.freeze(ctx) } : {}),
+      ...("input" in issue ? { input: issue.input } : {}),
+    });
+  }
+
+  return records;
+}
+
+3.3 TypeBox Plain JSON Schema & t.* Walker (src/predictions/typebox.ts)
+Because drizzle-orm/typebox produces plain JSON Schema objects while generated or refined TypeBox code uses t.Optional(...) and t.Union([..., t.Null()]), predictedTKeys inspects plain JSON Schema keys directly (type, anyOf, enum, minLength, maxLength, pattern, format, minimum, maximum, exclusiveMinimum, exclusiveMaximum, multipleOf, additionalProperties) alongside TypeBox's optional/readonly symbols.
+
+TypeScript
+// packages/drizzle-validators/src/predictions/typebox.ts
+import {
+  ALL_PORTABLE_KEYS,
+  expandFormatCascade,
+  expandLengthCascade,
+  expandMaxCascade,
+  expandMinCascade,
+  expandMultipleOfCascade,
+  SIZED_ORIGIN_TYPES,
+  type CoreTypeDescriptor,
+  type KeyConstraintMeta,
+  type ObjectPredictedIssues,
+  type PortableErrorKey,
+  type PredictedIssue,
+  type PredictOptions,
+} from "./core";
+
+function isOptionalTypeBoxNode(
+  node: Record<string, any>,
+  isPropertyRequired = true,
+): boolean {
+  if (!isPropertyRequired) return true;
+  for (const sym of Object.getOwnPropertySymbols(node)) {
+    if (sym.description?.includes("Optional") || String(sym).includes("Optional")) {
+      return true;
+    }
+  }
+  return node["~optional"] === true || node.modifier === "Optional";
+}
+
+function unwrapNullableUnion(node: Record<string, any>): {
+  core: Record<string, any>;
+  nullable: boolean;
+} {
+  if (node.type === "null") {
+    return { core: node, nullable: true };
+  }
+  if (Array.isArray(node.anyOf)) {
+    const nonNullBranches = node.anyOf.filter(
+      (b: any) => !(b && typeof b === "object" && b.type === "null"),
+    );
+    const hadNull = nonNullBranches.length < node.anyOf.length;
+    if (hadNull && nonNullBranches.length === 1) {
+      return { core: nonNullBranches[0], nullable: true };
+    }
+    return { core: node, nullable: hadNull };
+  }
+  return { core: node, nullable: false };
+}
+
+export function predictedTKeys(
+  field: unknown,
+  options?: PredictOptions & { isPropertyRequired?: boolean },
+): PredictedIssue {
+  const includeCore = options?.includeCore ?? true;
+  const includeChecks = options?.includeChecks ?? true;
+
+  if (!field || typeof field !== "object") {
+    return {
+      keys: includeCore ? ALL_PORTABLE_KEYS : [],
+      meta: Object.freeze({}),
+      coreType: Object.freeze({
+        type: "unknown",
+        optional: false,
+        nullable: false,
+        sizedOrigin: false,
+        intCheck: false,
+        isEnum: false,
+        isObject: false,
+        isStrictObject: false,
+        isUnion: false,
+      }),
+    };
+  }
+
+  const rawNode = field as Record<string, any>;
+  const optional = isOptionalTypeBoxNode(rawNode, options?.isPropertyRequired ?? true);
+  const { core, nullable } = unwrapNullableUnion(rawNode);
+
+  const isEnum =
+    Array.isArray(core.enum) ||
+    core.const !== undefined ||
+    (Array.isArray(core.anyOf) &&
+      core.anyOf.length > 0 &&
+      core.anyOf.every((b: any) => b && typeof b === "object" && "const" in b));
+  const isUnion = !isEnum && Array.isArray(core.anyOf);
+  const rawType = typeof core.type === "string" ? core.type : isEnum ? "enum" : isUnion ? "union" : "any";
+
+  if (rawType === "any" && Object.keys(core).length === 0) {
+    return {
+      keys: includeCore ? ALL_PORTABLE_KEYS : [],
+      meta: Object.freeze({}),
+      coreType: Object.freeze({
+        type: "any",
+        optional,
+        nullable,
+        sizedOrigin: false,
+        intCheck: false,
+        isEnum: false,
+        isObject: false,
+        isStrictObject: false,
+        isUnion: false,
+      }),
+    };
+  }
+
+  const coreTypeStr = rawType === "integer" ? "number" : rawType;
+  const intCheck = rawType === "integer";
+  const sizedOrigin = SIZED_ORIGIN_TYPES.has(coreTypeStr);
+  const isObject = coreTypeStr === "object";
+  const isStrictObject = isObject && core.additionalProperties === false;
+
+  const keySet = new Set<PortableErrorKey>();
+  const meta: Record<string, KeyConstraintMeta> = {};
+
+  if (includeCore) {
+    if (!optional) keySet.add("required");
+    if (!nullable && rawType !== "null") keySet.add("null");
+    if (isEnum) {
+      keySet.add("invalid_value");
+      keySet.add("invalid_type");
+      const values = Array.isArray(core.enum)
+        ? core.enum
+        : core.const !== undefined
+          ? [core.const]
+          : core.anyOf?.map((b: any) => b.const);
+      if (values) meta.invalid_value = { values };
+    } else if (isUnion) {
+      keySet.add("invalid_union");
+      keySet.add("invalid_type");
+    } else {
+      keySet.add("invalid_type");
+    }
+    if (isStrictObject) {
+      keySet.add("unrecognized_keys");
+    }
+  }
+
+  if (includeChecks) {
+    if (intCheck) {
+      keySet.add("int");
+    }
+    if (typeof core.minLength === "number" && typeof core.maxLength === "number" && core.minLength === core.maxLength) {
+      const cascade = expandLengthCascade();
+      for (const k of cascade) keySet.add(k);
+      for (const k of cascade) meta[k] = { exact: core.minLength };
+    } else {
+      if (typeof core.minLength === "number") {
+        const cascade = expandMinCascade(true);
+        for (const k of cascade) keySet.add(k);
+        for (const k of cascade) meta[k] = { minimum: core.minLength, inclusive: true };
+      }
+      if (typeof core.maxLength === "number") {
+        const cascade = expandMaxCascade(true);
+        for (const k of cascade) keySet.add(k);
+        for (const k of cascade) meta[k] = { maximum: core.maxLength, inclusive: true };
+      }
+    }
+
+    if (core.minimum !== undefined || core.exclusiveMinimum !== undefined) {
+      const inclusive = core.minimum !== undefined;
+      const minVal = inclusive ? core.minimum : core.exclusiveMinimum;
+      const cascade = expandMinCascade(sizedOrigin);
+      for (const k of cascade) keySet.add(k);
+      for (const k of cascade) meta[k] = { minimum: minVal, inclusive };
+    }
+    if (core.maximum !== undefined || core.exclusiveMaximum !== undefined) {
+      const inclusive = core.maximum !== undefined;
+      const maxVal = inclusive ? core.maximum : core.exclusiveMaximum;
+      const cascade = expandMaxCascade(sizedOrigin);
+      for (const k of cascade) keySet.add(k);
+      for (const k of cascade) meta[k] = { maximum: maxVal, inclusive };
+    }
+    if (core.multipleOf !== undefined) {
+      const cascade = expandMultipleOfCascade();
+      for (const k of cascade) keySet.add(k);
+      for (const k of cascade) meta[k] = { multipleOf: core.multipleOf };
+    }
+    if (typeof core.pattern === "string") {
+      const cascade = expandFormatCascade("regex");
+      for (const k of cascade) keySet.add(k);
+      for (const k of cascade) meta[k] = { format: "regex", pattern: core.pattern };
+    }
+    if (typeof core.format === "string") {
+      const cascade = expandFormatCascade(core.format);
+      for (const k of cascade) keySet.add(k);
+      for (const k of cascade) meta[k] = { format: core.format };
+    }
+  }
+
+  const coreType: CoreTypeDescriptor = Object.freeze({
+    type: coreTypeStr,
+    ...(typeof core.format === "string" ? { format: core.format } : {}),
+    optional,
+    nullable,
+    sizedOrigin,
+    intCheck,
+    isEnum,
+    isObject,
+    isStrictObject,
+    isUnion,
+  });
+
+  return {
+    keys: Object.freeze(Array.from(keySet)),
+    meta: Object.freeze(meta),
+    coreType,
+  };
+}
+
+export function predictedTKeysObject<T extends Record<string, any>>(
+  schema: T,
+  options?: PredictOptions,
+): ObjectPredictedIssues {
+  const properties = schema?.properties ?? {};
+  const requiredSet = new Set<string>(Array.isArray(schema?.required) ? schema.required : []);
+  const out: Record<string, PredictedIssue> = {};
+
+  for (const [key, propSchema] of Object.entries(properties)) {
+    out[key] = predictedTKeys(propSchema, {
+      ...options,
+      isPropertyRequired: requiredSet.has(key),
+    });
+  }
+  return Object.freeze(out);
+}
+
+4. Type-Level Architecture (src/predictions/types.ts)
+Because Zod 4 erases .min(), .max(), and .regex() check additions from the static TypeScript type, the tightest sound compile-time key set for a field TField is the set of keys permitted by its unwrapped core type (FieldErrorMapForCore<DeepUnwrap<TField>>) minus the "default" catch-all key, refined further by whether the outer wrapper stack permits undefined ("required") or null ("null").
+
+TypeScript
+// packages/drizzle-validators/src/predictions/types.ts
+import type { z } from "zod";
+import type { DeepUnwrap, FieldErrorMapForCore } from "../refine";
+import type { FieldErrorRecord, PortableErrorKey } from "./core";
+
+/** True when `T` accepts `undefined` at the outer wrapper level. */
+type AcceptsUndefined<T extends z.ZodTypeAny> =
+  T extends z.ZodOptional<any> | z.ZodExactOptional<any> | z.ZodDefault<any> | z.ZodCatch<any>
+    ? true
+    : T extends z.ZodNullable<infer Inner extends z.ZodTypeAny>
+      ? AcceptsUndefined<Inner>
+      : T extends z.ZodReadonly<infer Inner extends z.ZodTypeAny>
+        ? AcceptsUndefined<Inner>
+        : false;
+
+/** True when `T` accepts `null` at the outer wrapper level. */
+type AcceptsNull<T extends z.ZodTypeAny> =
+  T extends z.ZodNullable<any> | z.ZodCatch<any>
+    ? true
+    : T extends z.ZodOptional<infer Inner extends z.ZodTypeAny>
+      ? AcceptsNull<Inner>
+      : T extends z.ZodExactOptional<infer Inner extends z.ZodTypeAny>
+        ? AcceptsNull<Inner>
+        : T extends z.ZodDefault<infer Inner extends z.ZodTypeAny>
+          ? AcceptsNull<Inner>
+          : T extends z.ZodReadonly<infer Inner extends z.ZodTypeAny>
+            ? AcceptsNull<Inner>
+            : false;
+
+type WrapperOmittedKeys<TField extends z.ZodTypeAny> =
+  | "default"
+  | (AcceptsUndefined<TField> extends true ? "required" : never)
+  | (AcceptsNull<TField> extends true ? "null" : never);
+
+/**
+* Compile-time string-literal union of portable error keys that `TField` can emit.
+*
+* - Reflects `.as(z.email())` / `.as(z.number())` core replacements via `DeepUnwrap<TField>`.
+* - Reflects `.optional()`, `.nullable()`, `.required()`, `.nonnullable()`, `.unwrap()` via wrapper inspection.
+*/
+export type PredictedErrorKeys<TField extends z.ZodTypeAny> = Exclude<
+  keyof FieldErrorMapForCore<DeepUnwrap<TField>> & string,
+  WrapperOmittedKeys<TField>
+>;
+
+/**
+* Maps every field `K` of a `ZodObject` to its `PredictedErrorKeys<TShape[K]>`.
+*/
+export type SchemaPredictedErrorKeys<T extends z.ZodObject<any>> = {
+  [K in keyof T["shape"] & string]: PredictedErrorKeys<T["shape"][K]>;
+};
+
+/**
+* Discriminated union of `FieldErrorRecord` across all top-level fields of `T`.
+* Narrowing `if (err.field === "age")` narrows `err.kind` to `PredictedErrorKeys<T["shape"]["age"]>`.
+*/
+export type SchemaErrorRecord<T extends z.ZodObject<any>> = {
+  [K in keyof T["shape"] & string]: FieldErrorRecord<
+    K,
+    PredictedErrorKeys<T["shape"][K]>
+  >;
+}[keyof T["shape"] & string] | FieldErrorRecord<string, PortableErrorKey>;
+
+Wrapper-Sensitive Compile-Time Verification
+1. If baseSchema.shape.bio is z.ZodOptional<z.ZodNullable<z.ZodString>>:
+  * AcceptsUndefined<typeof baseSchema.shape.bio> is true  "required" is excluded from PredictedErrorKeys.
+  * AcceptsNull<typeof baseSchema.shape.bio> is true  "null" is excluded from PredictedErrorKeys.
+  2. After refineSchema(baseSchema, (f) => ({ bio: f.bio.required().nonnullable() })):
+  * refined.shape.bio has type z.ZodString.
+  * Both "required" and "null" are automatically restored into PredictedErrorKeys<typeof refined.shape.bio>.
+5. Public Subpath Exports & Bundle Isolation
+All prediction utilities are exposed under dedicated subpath entrypoints to uphold G5 (zero bundle cost when unused and zero cross-validator imports):
+
+Subpath
+Exported Symbols
+Validator Runtime Dependency
+@vacuus/drizzle-validators/predictions
+predictedKeys, predictedKeysObject, errorsOf, PredictedIssue, FieldErrorRecord, PredictedErrorKeys, SchemaPredictedErrorKeys, SchemaErrorRecord, PortableErrorKey, KeyConstraintMeta, PredictOptions, ErrorsOfOptions
+None (import type { z } from "zod" only)
+@vacuus/drizzle-validators/predictions/valibot
+predictedVKeys, errorsOfV, plus shared types from ./core
+valibot (safeParse only)
+@vacuus/drizzle-validators/predictions/typebox
+predictedTKeys, predictedTKeysObject, plus shared types from ./core
+None (pure JSON Schema / symbol inspection)
+@vacuus/drizzle-validators/refine
+Re-exports predictedKeys, predictedKeysObject, errorsOf, PredictedErrorKeys, SchemaErrorRecord
+None (import type { z } from "zod" only)
+@vacuus/drizzle-validators/refine/valibot
+Re-exports predictedVKeys, errorsOfV
+valibot
+6. Phased Implementation Roadmap
+Milestone M0 — Shared Core & Export Wiring (src/predictions/core.ts, src/error-map.ts)
+  1. Create packages/drizzle-validators/src/predictions/core.ts containing PortableErrorKey, PredictedIssue, FieldErrorRecord, FORMAT_PARENT, SPECIFIC_FORMAT_KEYS, SIZED_ORIGIN_TYPES, and cascade expansion helpers.
+  2. Update packages/drizzle-validators/src/error-map.ts to import FORMAT_PARENT and SPECIFIC_FORMAT_KEYS from ./predictions/core, and export siteOf, candidateKeys, and SiteMeta for internal reuse.
+  3. Export candidateVKeys and unwrapAllV from packages/drizzle-validators/src/valibot-error-map.ts.
+  4. Verification Gate: Existing 269 tests pass with zero output diff.
+Milestone M1 — Zod Runtime Walker, errorsOf, and Type Layer (src/predictions/zod.ts, src/predictions/types.ts)
+  1. Implement predictedKeys, predictedKeysObject, and errorsOf in src/predictions/zod.ts.
+  2. Implement PredictedErrorKeys<TField>, SchemaPredictedErrorKeys<T>, and SchemaErrorRecord<T> in src/predictions/types.ts (including AcceptsUndefined / AcceptsNull wrapper narrowing).
+  3. Create src/predictions/index.ts barrel and re-export from src/refine.ts.
+  4. Verification Gate: tests/predictions/predictions-zod.test.ts, tests/predictions/errors-of-zod.test.ts, and tests/predictions/predicted-keys-types.test.ts pass.
+Milestone M2 — Valibot & TypeBox Walkers (src/predictions/valibot.ts, src/predictions/typebox.ts)
+  1. Implement predictedVKeys and errorsOfV in src/predictions/valibot.ts.
+  2. Implement predictedTKeys and predictedTKeysObject in src/predictions/typebox.ts supporting both plain JSON Schema from drizzle-orm/typebox and t.* instances.
+  3. Wire ./predictions, ./predictions/valibot, and ./predictions/typebox in packages/drizzle-validators/package.json and build.ts.
+  4. Verification Gate: Cross-target parity tests (tests/predictions/cross-target-parity.test.ts) pass across Zod, Valibot, and TypeBox.
+Milestone M3 — Playground Dogfooding & Tree-Shaking Audit
+  1. Update playgrounds/rhf-zod and playgrounds/tanstack-form to consume errorsOf and predictedKeys, rendering validation feedback keyed by record.kind and meta bounds (minimum, maximum, format).
+  2. Extend tests/bug-repro/refine-treeshaking.test.ts to assert that importing @vacuus/drizzle-validators/predictions pulls zero Valibot/TypeBox code and keeps client bundles under the 120 KB ceiling.
+7. Verification & Test Suite Specification
+Create packages/drizzle-validators/tests/predictions/ containing five test suites:
+
+Suite File
+Assertions & Coverage
+predictions-zod.test.ts
+1. Presence & Wrappers: Required column predicts "required" and "null"; .optional() drops "required"; .nullable() drops "null"; .default() and .catch() drop "required"; .required() and .nonnullable() inside refineSchema restore "required" and "null".
+
+2. Integer vs. Number: z.int() and z.number().int() predict ["required", "null", "invalid_type", "int"]; Drizzle integer column with .gte().lte() predicts ["required", "null", "invalid_type", "int", "min", "too_small", "max", "too_big"].
+
+3. Sized vs. Unsized Bounds: z.string().min(3).max(10) predicts min_length and max_length alongside min/max/too_small/too_big with meta.min_length = { minimum: 3, inclusive: true }; z.number().min(3) predicts min and too_small (never min_length).
+
+4. Format Cascades: z.uuidv4() predicts ["uuidv4", "uuid", "format", "invalid_format"]; z.httpUrl() predicts ["httpUrl", "url", "format", "invalid_format"]; plain z.string() predicts neither "format" nor "invalid_format".
+
+5. Overwrites Ignored: z.string().trim().toLowerCase() adds zero check keys.
+inverse-property.test.ts
+Soundness & Completeness Property Test: Across a fixture matrix of 25 refined Drizzle columns (varchar, integer, bigint, boolean, timestamp, pgEnum, jsonb, uuid, array, strict objects, unions) and an adversarial corpus of inputs (undefined, null, 123, 15.5, "abc", "", "x".repeat(500), [], { extra: 1 }):
+
+• Soundness: For every record returned by errorsOf(schema, badInput) and errorsOfV(vSchema, badInput), assert predicted.keys.includes(record.kind) and record.candidates.every(k => predicted.keys.includes(k)).
+
+• Completeness: Every key in predicted.keys appears in record.candidates for at least one adversarial input in the corpus.
+cross-target-parity.test.ts
+Generates insertSchema and updateSchema for the PostgreSQL complex table fixture across "zod", "valibot", and "typebox", asserting predictedKeys, predictedVKeys, and predictedTKeys produce identical key sets and meta bounds for all shared column constraints.
+predicted-keys-types.test.ts
+Compile-time tsc --noEmit assertions:
+
+• PredictedErrorKeys<z.ZodOptional<z.ZodString>> excludes "required" and "int", includes "null", "min_length", "email".
+
+• PredictedErrorKeys<typeof refined.shape.age> (where age was .as(z.int())) includes "int" and "multiple_of", and @ts-expect-error rejects "email" and "min_length".
+
+• Narrowing SchemaErrorRecord<typeof refined> on if (record.field === "email") narrows record.kind to string/format error keys.
+predictions-treeshaking.test.ts
+  1. Bundles an entrypoint importing { predictedKeys, errorsOf } from "@vacuus/drizzle-validators/predictions" via esbuild and asserts zero occurrences of valibot, typebox, drizzle-orm, or Zod locale strings.

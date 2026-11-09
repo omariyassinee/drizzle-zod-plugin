@@ -30,6 +30,8 @@ logs/
 *.tsbuildinfo
 .idea/
 .vscode/
+.zed/
+.zcode/
 .DS_Store
 
 

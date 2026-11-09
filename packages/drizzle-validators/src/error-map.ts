@@ -2,6 +2,7 @@ import type { z } from "zod";
 import { STRING_FORMAT_NAMES, type StringFormat } from "./constants";
 import { DrizzleValidatorsError } from "./errors";
 import { resolveStringFormatName } from "./format-names";
+import { FORMAT_PARENT, SPECIFIC_FORMAT_KEYS } from "./predictions/core";
 import {
 	cloneSchemaWithDef,
 	cloneZodCheck,
@@ -178,21 +179,6 @@ const VALID_MAP_KEYS: ReadonlySet<string> = new Set<string>([
 	...STRING_FORMAT_NAMES,
 ]);
 
-const SPECIFIC_FORMAT_KEYS: ReadonlySet<string> = new Set<string>([
-	"regex",
-	"starts_with",
-	"ends_with",
-	"includes",
-	...STRING_FORMAT_NAMES,
-]);
-
-/** Parent format fallback when a versioned/protocol format key is not set. */
-const FORMAT_PARENT: Readonly<Record<string, string>> = {
-	uuidv4: "uuid",
-	uuidv6: "uuid",
-	uuidv7: "uuid",
-	httpUrl: "url",
-};
 
 /** Keys that only ever fire on the core schema def, never on an attached check. */
 const CORE_ONLY_KEYS: ReadonlySet<string> = new Set<string>([
@@ -262,14 +248,14 @@ function isCheckInstance(inst: unknown): boolean {
 	return Boolean(d && typeof d.check === "string" && d.type === undefined);
 }
 
-interface SiteMeta {
+export interface SiteMeta {
 	readonly isCheck: boolean;
 	readonly intCheck: boolean;
 	readonly sizedOrigin: boolean;
 	readonly formatName: string | undefined;
 }
 
-function siteOf(def: InternalZodDef, isCheck: boolean): SiteMeta {
+export function siteOf(def: InternalZodDef, isCheck: boolean): SiteMeta {
 	const isStringFormat =
 		def.check === "string_format" ||
 		(def.type === "string" && typeof def.format === "string");
@@ -291,7 +277,7 @@ function siteOf(def: InternalZodDef, isCheck: boolean): SiteMeta {
 	};
 }
 
-function candidateKeys(issue: Record<string, any>, site: SiteMeta): string[] {
+export function candidateKeys(issue: Record<string, any>, site: SiteMeta): string[] {
 	// Non-integer numbers on .int() or z.int() emit code: "invalid_type" with
 	// format: "safeint" — they are numbers, so they must resolve `int`, never
 	// `invalid_type` (finding #5 in the final plan).
@@ -310,7 +296,9 @@ function candidateKeys(issue: Record<string, any>, site: SiteMeta): string[] {
 			return ["invalid_type"];
 
 		case "invalid_value":
-			return ["invalid_value"];
+			if (issue.input === undefined) return ["required", "invalid_type"];
+			if (issue.input === null) return ["null", "invalid_type"];
+			return ["invalid_value", "invalid_type"];
 
 		case "too_small":
 			if (issue.exact) return ["length", "too_small"];

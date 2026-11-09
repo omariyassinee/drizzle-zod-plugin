@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 // key must be versioned with the released package version, independent of
 // the runtime location-walking fallback.
 const PKG = JSON.parse(
-	readFileSync(new URL("./package.json", import.meta.url), "utf8"),
+  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
 ) as { version: string };
 
 const DEFINE = { __PLUGIN_VERSION__: JSON.stringify(PKG.version) };
@@ -19,56 +19,63 @@ const DEFINE = { __PLUGIN_VERSION__: JSON.stringify(PKG.version) };
 // Everything the library links against at runtime stays external so the
 // published bundle never inlines peer/vendor code.
 const EXTERNAL = [
-	"vite",
-	"esbuild",
-	"drizzle-orm",
-	"drizzle-zod",
-	"zod",
-	"valibot",
-	"typebox",
-	"arktype",
-	"drizzle-valibot",
-	"drizzle-typebox",
-	"drizzle-arktype",
+  "vite",
+  "esbuild",
+  "drizzle-orm",
+  "drizzle-zod",
+  "zod",
+  "valibot",
+  "typebox",
+  "arktype",
+  "drizzle-valibot",
+  "drizzle-typebox",
+  "drizzle-arktype",
 ];
 
 await rm("dist", { recursive: true, force: true });
 
 function assertSuccess(
-	label: string,
-	result: Awaited<ReturnType<typeof Bun.build>>,
+  label: string,
+  result: Awaited<ReturnType<typeof Bun.build>>,
 ): void {
-	if (result.success) return;
-	console.error(`[${label}] build failed:`);
-	for (const log of result.logs) console.error(String(log));
-	process.exit(1);
+  if (result.success) return;
+  console.error(`[${label}] build failed:`);
+  for (const log of result.logs) console.error(String(log));
+  process.exit(1);
 }
 
 const [libResult, cliResult] = await Promise.all([
-	Bun.build({
-		entrypoints: ["src/index.ts", "src/refine.ts", "src/refine/valibot.ts"],
-		outdir: "dist",
-		target: "node",
-		format: "esm",
-		splitting: true,
-		minify: true,
-		sourcemap: false,
-		external: EXTERNAL,
-		define: DEFINE,
-		root: "src",
-	}),
-	Bun.build({
-		entrypoints: ["src/cli.ts"],
-		outdir: "dist",
-		target: "node",
-		format: "esm",
-		splitting: false,
-		minify: true,
-		sourcemap: false,
-		external: EXTERNAL,
-		define: DEFINE,
-		root: "src",
-	}),
+  Bun.build({
+    entrypoints: [
+      "src/index.ts",
+      "src/refine.ts",
+      "src/refine/valibot.ts",
+      "src/predictions/index.ts",
+      "src/predictions/valibot.ts",
+      "src/predictions/typebox.ts",
+    ],
+    outdir: "dist",
+    target: "node",
+    format: "esm",
+    splitting: true,
+    minify: true,
+    sourcemap: false,
+    external: EXTERNAL,
+    define: DEFINE,
+    root: "src",
+  }),
+  Bun.build({
+    entrypoints: ["src/cli.ts"],
+    outdir: "dist",
+    target: "node",
+    format: "esm",
+    splitting: false,
+    minify: true,
+    sourcemap: false,
+    external: EXTERNAL,
+    define: DEFINE,
+    root: "src",
+  }),
 ]);
 
 assertSuccess("ESM library", libResult);

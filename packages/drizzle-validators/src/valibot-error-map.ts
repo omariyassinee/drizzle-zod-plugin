@@ -2,6 +2,7 @@ import * as v from "valibot";
 import { DrizzleValidatorsError } from "./errors";
 import { MAP_ERROR, isPlainObject, type ErrorMessage } from "./error-map";
 import type { AnyValibotNode } from "./valibot-refine";
+export { unwrapAllV } from "./valibot-refine";
 
 // ───────────────────────── Public Types ─────────────────────────
 //
@@ -223,13 +224,13 @@ export function candidateVKeys(issue: {
 				return ["length", "too_small", "too_big"];
 			case "min_value":
 			case "gt_value":
-				return [issue.type ?? "min_value", "min", "too_small"];
+				return ["min", "too_small"];
 			case "max_value":
 			case "lt_value":
-				return [issue.type ?? "max_value", "max", "too_big"];
+				return ["max", "too_big"];
 			case "integer":
 			case "safe_integer":
-				return ["int", "integer"];
+				return ["int"];
 			case "multiple_of":
 				return ["multiple_of", "not_multiple_of"];
 			case "value":
@@ -271,7 +272,10 @@ function evaluateVCandidates(
 	issue: VIssueLike,
 ): string | undefined {
 	for (const key of [...keys, "default"]) {
-		const entry = map[key];
+		let entry = map[key];
+		if (entry === undefined && key === "int") entry = map.integer;
+		if (entry === undefined && key === "min") entry = map.min_value ?? map.gt_value;
+		if (entry === undefined && key === "max") entry = map.max_value ?? map.lt_value;
 		if (entry === undefined) continue;
 		const resolved =
 			typeof entry === "function" ? entry(issue as never) : entry;

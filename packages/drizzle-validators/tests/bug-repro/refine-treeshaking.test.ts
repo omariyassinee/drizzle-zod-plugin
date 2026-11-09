@@ -86,3 +86,20 @@ export const refined = refineZSchema(
 	assertLocaleFree(bundledText);
 	assertCompact(bundledText);
 });
+
+test("predictions subpath is tree-shakeable, pulls zero valibot/typebox, and stays under 120 KB", async () => {
+	const bundledText = await bundle(`
+import { predictedKeys, errorsOf } from "./dist/predictions/index.js";
+import { object, string, number } from "zod";
+
+const schema = object({ email: string(), age: number() });
+export const predictions = predictedKeys(schema.shape.email);
+export const errors = errorsOf(schema, { email: 123 });
+`);
+
+	assertLocaleFree(bundledText);
+	assertCompact(bundledText);
+	expect(bundledText.includes("valibot")).toBe(false);
+	expect(bundledText.includes("typebox")).toBe(false);
+	expect(bundledText.includes("drizzle-orm")).toBe(false);
+});

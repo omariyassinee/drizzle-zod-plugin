@@ -10,17 +10,18 @@ import * as z from "zod";
 import { refineVSchema } from "virtual:validators-valibot";
 
 const a = refineVSchema(accountsInsertValibot, (f) => ({
-	email: f.email.as(v.pipe(v.string(), v.email())),
+  email: f.email.as(v.pipe(v.string(), v.email())),
 }));
 
 export function validateAccountDual(raw: unknown) {
-	const zodResult = accountsInsertSchema.safeParse(raw);
-	const valibotResult = v.safeParse(accountsInsertValibot, raw);
-	return {
-		zod: zodResult.success,
-		valibot: valibotResult.success,
-		agree: zodResult.success === valibotResult.success,
-	};
+  const zodResult = accountsInsertSchema.safeParse(raw);
+  const valibotResult = v.safeParse(accountsInsertValibot, raw);
+
+  return {
+    zod: zodResult.success,
+    valibot: valibotResult.success,
+    agree: zodResult.success === valibotResult.success,
+  };
 }
 
 export { z, v };
