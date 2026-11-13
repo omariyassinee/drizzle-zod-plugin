@@ -155,41 +155,111 @@ function isAlwaysTruePredicate(fn: (...args: unknown[]) => unknown): boolean {
  * Probes well-known global classes; returns undefined for anything else.
  */
 function probeInstanceofClass(fn: (v: unknown) => unknown): string | undefined {
-	const candidates: [string, unknown][] = [
-		["Buffer", Buffer],
-		["Date", Date],
-		["File", typeof File !== "undefined" ? File : undefined],
-		["Blob", typeof Blob !== "undefined" ? Blob : undefined],
-		["Map", Map],
-		["Set", Set],
-		["RegExp", RegExp],
+	const candidates: Array<{
+		name: string;
+		cls: unknown;
+		create: () => unknown;
+		negativeProbes: unknown[];
+	}> = [
+		{
+			name: "Buffer",
+			cls: typeof Buffer !== "undefined" ? Buffer : undefined,
+			create: () => Buffer.from("x"),
+			// Buffer extends Uint8Array, but Uint8Array is NOT Buffer.
+			// An instanceof Buffer check MUST reject plain Uint8Array.
+			negativeProbes: [new Uint8Array(0), new Uint8Array([1, 2, 3])],
+		},
+		{
+			name: "Date",
+			cls: Date,
+			create: () => new Date(),
+			negativeProbes: [1234567890],
+		},
+		{
+			name: "File",
+			cls: typeof File !== "undefined" ? File : undefined,
+			create: () => new File(["x"], "x"),
+			negativeProbes: [typeof Blob !== "undefined" ? new Blob(["x"]) : {}],
+		},
+		{
+			name: "Blob",
+			cls: typeof Blob !== "undefined" ? Blob : undefined,
+			create: () => new Blob(["x"]),
+			negativeProbes: ["blob-string"],
+		},
+		{
+			name: "Map",
+			cls: Map,
+			create: () => new Map(),
+			negativeProbes: [new Set(), {}],
+		},
+		{
+			name: "Set",
+			cls: Set,
+			create: () => new Set(),
+			negativeProbes: [new Map(), []],
+		},
+		{
+			name: "RegExp",
+			cls: RegExp,
+			create: () => /x/,
+			negativeProbes: ["/x/"],
+		},
 	];
-	for (const [name, cls] of candidates) {
-		if (!cls) continue;
+
+	const universalNegatives: unknown[] = [
+		null,
+		undefined,
+		"not-an-instance",
+		12345,
+		{},
+		() => {},
+		[],
+	];
+
+	const matched: string[] = [];
+
+	for (const candidate of candidates) {
+		if (!candidate.cls) continue;
 		try {
-			// Must accept an instance of the class and reject a non-instance.
-			const instance =
-				name === "Buffer"
-					? Buffer.from("x")
-					: name === "Date"
-						? new Date()
-						: name === "File"
-							? new File(["x"], "x")
-							: name === "Blob"
-								? new Blob(["x"])
-								: name === "Map"
-									? new Map()
-									: name === "Set"
-										? new Set()
-										: /x/;
-			if (fn(instance) === true && fn("not-an-instance") === false) {
-				return name;
+			const inst = candidate.create();
+			if (fn(inst) !== true) continue;
+
+			let failedNeg = false;
+			for (const neg of universalNegatives) {
+				if (fn(neg) !== false) {
+					failedNeg = true;
+					break;
+				}
 			}
+			if (failedNeg) continue;
+
+			for (const neg of candidate.negativeProbes) {
+				if (fn(neg) !== false) {
+					failedNeg = true;
+					break;
+				}
+			}
+			if (failedNeg) continue;
+
+			// Must reject instances of all other candidate classes
+			for (const other of candidates) {
+				if (other === candidate || !other.cls) continue;
+				const otherInst = other.create();
+				if (fn(otherInst) !== false) {
+					failedNeg = true;
+					break;
+				}
+			}
+			if (failedNeg) continue;
+
+			matched.push(candidate.name);
 		} catch {
 			// predicate threw on a probe — not an instanceof check on this class
 		}
 	}
-	return undefined;
+
+	return matched.length === 1 ? matched[0] : undefined;
 }
 
 /**
@@ -237,6 +307,14 @@ function overwriteCheckToCode(zodDef: any): string {
 				["\u00a0 ab \n", "ab"],
 				["hello world", "hello world"],
 				["Ab\t", "Ab"],
+				[
+					"  this is a long string that must be preserved without truncation and properly trimmed  ",
+					"this is a long string that must be preserved without truncation and properly trimmed",
+				],
+				[
+					"\n\t  multiple words with extra padding at the ends of a very long sentence \t\n",
+					"multiple words with extra padding at the ends of a very long sentence",
+				],
 			],
 		},
 		{
@@ -245,6 +323,10 @@ function overwriteCheckToCode(zodDef: any): string {
 				["\u00a0 AB \n", "\u00a0 ab \n"],
 				["hello world", "hello world"],
 				["Ab\t", "ab\t"],
+				[
+					"  THIS IS A LONG STRING WITH UPPERCASE CHARACTERS ACROSS MORE THAN TWENTY CHARACTERS  ",
+					"  this is a long string with uppercase characters across more than twenty characters  ",
+				],
 			],
 		},
 		{
@@ -253,6 +335,10 @@ function overwriteCheckToCode(zodDef: any): string {
 				["ab", "AB"],
 				["hello world", "HELLO WORLD"],
 				["\u00a0 ab \n", "\u00a0 AB \n"],
+				[
+					"  this is a long string with lowercase characters across more than twenty characters  ",
+					"  THIS IS A LONG STRING WITH LOWERCASE CHARACTERS ACROSS MORE THAN TWENTY CHARACTERS  ",
+				],
 			],
 		},
 		{
@@ -261,6 +347,10 @@ function overwriteCheckToCode(zodDef: any): string {
 				["hello world", "hello-world"],
 				["a b  c", "a-b-c"],
 				["  a  ", "a"],
+				[
+					"  This is a Long Title With Multiple Words That Exceeds Twenty Characters  ",
+					"this-is-a-long-title-with-multiple-words-that-exceeds-twenty-characters",
+				],
 			],
 		},
 	];
@@ -281,20 +371,21 @@ function overwriteCheckToCode(zodDef: any): string {
 	}
 
 	if (tx.toString().includes("normalize")) {
-		// Probe the actual normalization form: apply tx to a string that
-		// differs under NFC/NFD/NFKC/NFKD ("é" as NFD is "e" + U+0301).
-		let out: string | undefined;
-		try {
-			const probe = "\u00e9";
-			out = tx(probe);
-			if (out === probe.normalize("NFC")) return ".normalize()";
-			if (out === probe.normalize("NFD")) return `.normalize("NFD")`;
-			if (out === probe.normalize("NFKC")) return `.normalize("NFKC")`;
-			if (out === probe.normalize("NFKD")) return `.normalize("NFKD")`;
-		} catch {
-			// fall through to the generic failure below
+		// Probe the actual normalization form: apply tx to strings that
+		// differ under NFC/NFD/NFKC/NFKD ("é" as NFD is "e" + U+0301).
+		const normalizeProbes = ["\u00e9", "\u1e0b\u0323", "caf\u00e9", "hello world"];
+		for (const form of ["NFC", "NFD", "NFKC", "NFKD"] as const) {
+			try {
+				const matches = normalizeProbes.every(
+					(p) => tx(p) === p.normalize(form),
+				);
+				if (matches) {
+					return form === "NFC" ? ".normalize()" : `.normalize("${form}")`;
+				}
+			} catch {
+				// probe threw
+			}
 		}
-		out = undefined;
 	}
 
 	const txStr = tx.toString();
@@ -844,42 +935,91 @@ function _zodTypeToCode(
 			// shallowCloned per access, lazies (.default(fn)) invoke the
 			// callback — the def carries no static/lazy flag and the
 			// original argument lives only in the closure. Probing the
-			// descriptor cannot discriminate, so probe DETERMINISM instead:
-			// evaluate the getter twice; if both reads serialize to the
-			// same source, the value is effectively static and emitting it
-			// is faithful (zod itself clones per access). Different reads =
-			// a lazy runtime computation that would freeze one snapshot —
-			// fail loud (P2-04).
+			// descriptor alone cannot discriminate. Instead, probe determinism
+			// with multi-condition shifted execution: evaluate the getter, then
+			// evaluate with shifted time/random/environment.
+			//
+			// Static defaults evaluate instantaneously in 0ms (no busy-wait loop,
+			// finding H-03).
+			// Coarse timers (e.g. () => Math.floor(Date.now() / 10000)),
+			// random generators, counters, or runtime env lookups will diverge
+			// across shifted probes and fail loud (finding H-01, P2-04).
+			//
 			// A default of undefined means "no default" — skip the wrapper
 			// rather than emitting the invalid `z.x().default(undefined)`
 			// (finding M1).
 			if (def.defaultValue === undefined) {
 				return zodTypeToCode(def.innerType, cache, depth + 1, opts);
 			}
-			const evaluated = def.defaultValue;
-			if (typeof evaluated === "function") {
+
+			let envAccessed = false;
+			const origEnv = process.env;
+			const envProxy = new Proxy(origEnv, {
+				get(target, prop, receiver) {
+					envAccessed = true;
+					return Reflect.get(target, prop, receiver);
+				},
+			});
+
+			const origDateNow = Date.now;
+			const origPerfNow = performance.now;
+			const origDate = globalThis.Date;
+			const origRandom = Math.random;
+
+			let first: unknown;
+			let shifted: unknown;
+			let third: unknown;
+
+			try {
+				process.env = envProxy;
+				first = def.defaultValue;
+
+				if (typeof first === "function") {
+					throw new DrizzleValidatorsError(
+						`Cannot serialize a lazy .default(() => ...) default to static code — ` +
+							`emitting it would freeze a single snapshot value at generation time. ` +
+							`Use refineZSchema() with .default() at runtime, or provide a concrete default value.`,
+					);
+				}
+
+				// Shift time and random by a large offset to catch coarse-granularity timers
+				const shiftMs = 120_000;
+				Date.now = () => origDateNow.call(Date) + shiftMs;
+				performance.now = () => origPerfNow.call(performance) + shiftMs;
+				Math.random = () => (origRandom.call(Math) + 0.5) % 1;
+
+				const DateMock: any = function (...args: any[]) {
+					if (args.length === 0) return new origDate(origDateNow() + shiftMs);
+					return new (origDate as any)(...args);
+				};
+				DateMock.now = Date.now;
+				DateMock.prototype = origDate.prototype;
+				globalThis.Date = DateMock;
+
+				shifted = def.defaultValue;
+			} finally {
+				Date.now = origDateNow;
+				performance.now = origPerfNow;
+				Math.random = origRandom;
+				globalThis.Date = origDate;
+				process.env = origEnv;
+			}
+
+			third = def.defaultValue;
+
+			if (
+				envAccessed ||
+				serializeDefaultValue(shifted) !== serializeDefaultValue(first) ||
+				serializeDefaultValue(third) !== serializeDefaultValue(first)
+			) {
 				throw new DrizzleValidatorsError(
 					`Cannot serialize a lazy .default(() => ...) default to static code — ` +
 						`emitting it would freeze a single snapshot value at generation time. ` +
 						`Use refineZSchema() with .default() at runtime, or provide a concrete default value.`,
 				);
 			}
-			// Space the two reads so millisecond-resolution nondeterminism
-			// (e.g. `() => new Date()`) cannot alias between them — codegen
-			// runs offline, so a ~3ms spin per default is negligible.
-			const spinStart = performance.now();
-			while (performance.now() - spinStart < 3) {
-				// spin
-			}
-			const second = def.defaultValue;
-			if (serializeDefaultValue(second) !== serializeDefaultValue(evaluated)) {
-				throw new DrizzleValidatorsError(
-					`Cannot serialize a lazy .default(() => ...) default to static code — ` +
-						`emitting it would freeze a single snapshot value at generation time. ` +
-						`Use refineZSchema() with .default() at runtime, or provide a concrete default value.`,
-				);
-			}
-			return `${zodTypeToCode(def.innerType, cache, depth + 1, opts)}.default(${serializeDefaultValue(evaluated)})`;
+
+			return `${zodTypeToCode(def.innerType, cache, depth + 1, opts)}.default(${serializeDefaultValue(first)})`;
 		}
 		case "readonly":
 			return `${zodTypeToCode(def.innerType, cache, depth + 1, opts)}.readonly()`;

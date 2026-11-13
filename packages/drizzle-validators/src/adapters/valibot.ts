@@ -94,8 +94,10 @@ function isBufferCheck(check: unknown): boolean {
 	try {
 		return (
 			check(Buffer.alloc(0)) === true &&
+			check(new Uint8Array(0)) === false &&
 			check("") === false &&
-			check({}) === false
+			check({}) === false &&
+			check(new Date()) === false
 		);
 	} catch {
 		return false;

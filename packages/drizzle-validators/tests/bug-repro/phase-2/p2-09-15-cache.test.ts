@@ -95,7 +95,7 @@ test("P2-09: freshly written envelope is version-stamped and the key folds in th
 			importStatement: "import * as z from 'zod'",
 		}, done!);
 		const disk = JSON.parse(readFileSync(cacheFile(root, key), "utf8"));
-		expect(disk.version).toBe(5);
+		expect(disk.version).toBe(6);
 		expect(disk.key).toBe(key);
 		const hit = await loadCachedData(root, key);
 		expect(hit?.code).toBe("export const a = 1;");

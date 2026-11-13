@@ -84,6 +84,8 @@ export async function loadCachedData(
 			depPaths: envelope.data.depPaths,
 			target: envelope.data.target,
 			importStatement: envelope.data.importStatement,
+			refineExportStatement: envelope.data.refineExportStatement,
+			refineDtsStatement: envelope.data.refineDtsStatement,
 		};
 	} catch {
 		return null;
@@ -109,6 +111,8 @@ export async function saveCachedData(
 			depPaths: data.depPaths,
 			target: data.target,
 			importStatement: data.importStatement,
+			refineExportStatement: data.refineExportStatement,
+			refineDtsStatement: data.refineDtsStatement,
 		},
 	};
 	const dir = cacheDir(projectRoot);
@@ -127,6 +131,9 @@ export function generatedEquals(
 	if (!a || !b) return false;
 	if (a.code !== b.code) return false;
 	if (a.singleFileCode !== b.singleFileCode) return false;
+	if (a.importStatement !== b.importStatement) return false;
+	if (a.refineExportStatement !== b.refineExportStatement) return false;
+	if (a.refineDtsStatement !== b.refineDtsStatement) return false;
 	if (a.exportNames.length !== b.exportNames.length) return false;
 	for (let i = 0; i < a.exportNames.length; i++) {
 		if (a.exportNames[i] !== b.exportNames[i]) return false;
@@ -171,7 +178,7 @@ export function generatedEquals(
  * CACHE_VERSION also stays versioned with the plugin release so historical
  * envelopes (from before this code existed) are never served.
  */
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 
 type CacheEnvelope = {
 	version: number;
@@ -185,6 +192,8 @@ type CacheEnvelope = {
 		depPaths: string[];
 		target: ValidatorTarget;
 		importStatement: string;
+		refineExportStatement?: string;
+		refineDtsStatement?: string;
 	};
 };
 
@@ -215,6 +224,18 @@ function isEnvelope(value: unknown): value is CacheEnvelope {
 		!Array.isArray(v.data?.depPaths) ||
 		!v.data.exportNames.every((n) => typeof n === "string") ||
 		!v.data.depPaths.every((d) => typeof d === "string")
+	) {
+		return false;
+	}
+	if (
+		v.data.refineExportStatement !== undefined &&
+		typeof v.data.refineExportStatement !== "string"
+	) {
+		return false;
+	}
+	if (
+		v.data.refineDtsStatement !== undefined &&
+		typeof v.data.refineDtsStatement !== "string"
 	) {
 		return false;
 	}
