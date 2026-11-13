@@ -3,6 +3,14 @@
 	"version": "0.1.0",
 	"description": "Generate zero-overhead, virtual validation schemas (Zod, Valibot, TypeBox) directly from Drizzle ORM tables at dev and build time. Zero Drizzle code reaches your client bundle.",
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/omariyassinee/drizzle-validators.git"
+	},
+	"homepage": "https://github.com/omariyassinee/drizzle-validators#readme",
+	"bugs": {
+		"url": "https://github.com/omariyassinee/drizzle-validators/issues"
+	},
 	"type": "module",
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
