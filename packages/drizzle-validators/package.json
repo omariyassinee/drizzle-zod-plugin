@@ -11,8 +11,8 @@
 		"node": ">=18.3"
 	},
 	"bin": {
-		"dv": "./dist/cli.js",
-		"drizzle-validators": "./dist/cli.js"
+		"dv": "dist/cli.js",
+		"drizzle-validators": "dist/cli.js"
 	},
 	"exports": {
 		".": {
