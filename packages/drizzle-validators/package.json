@@ -1,6 +1,6 @@
 {
-	"name": "@vacuus/drizzle-validators",
-	"version": "0.1.32",
+	"name": "drizzle-validators",
+	"version": "0.1.0",
 	"description": "Generate zero-overhead, virtual validation schemas (Zod, Valibot, TypeBox) directly from Drizzle ORM tables at dev and build time. Zero Drizzle code reaches your client bundle.",
 	"license": "MIT",
 	"type": "module",

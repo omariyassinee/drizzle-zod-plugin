@@ -16,9 +16,9 @@ export const zodAdapter: SerializerAdapter = {
 	importStatement: "import * as z from 'zod'",
 	dependencyPackages: DEPENDENCY_PACKAGES.zod,
 	refineExportStatement:
-		"export { refineZSchema } from '@vacuus/drizzle-validators/refine'",
+		"export { refineZSchema } from 'drizzle-validators/refine'",
 	refineDtsStatement:
-		"export const refineZSchema: (typeof import('@vacuus/drizzle-validators/refine'))['refineZSchema']",
+		"export const refineZSchema: (typeof import('drizzle-validators/refine'))['refineZSchema']",
 
 	async loadCreators(): Promise<SchemaCreators> {
 		try {

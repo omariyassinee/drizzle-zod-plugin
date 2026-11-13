@@ -316,9 +316,9 @@ export const valibotAdapter: SerializerAdapter = {
 	importStatement: "import * as v from 'valibot'",
 	dependencyPackages: DEPENDENCY_PACKAGES.valibot,
 	refineExportStatement:
-		"export { refineVSchema } from '@vacuus/drizzle-validators/refine/valibot'",
+		"export { refineVSchema } from 'drizzle-validators/refine/valibot'",
 	refineDtsStatement:
-		"export const refineVSchema: (typeof import('@vacuus/drizzle-validators/refine/valibot'))['refineVSchema']",
+		"export const refineVSchema: (typeof import('drizzle-validators/refine/valibot'))['refineVSchema']",
 
 	async loadCreators(): Promise<SchemaCreators> {
 		// Requires drizzle-orm >= the first release shipping ./valibot AND the

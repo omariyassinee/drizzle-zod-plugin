@@ -90,7 +90,7 @@ test("P2-12: internal tmp dir does not outlive the dev session (explicit close c
 		resolve: {
 			alias: [
 				{
-					find: "@vacuus/drizzle-validators/refine",
+					find: "drizzle-validators/refine",
 					replacement: resolve(process.cwd(), "src/refine.ts"),
 				},
 			],
@@ -145,7 +145,7 @@ test("P2-13: config rename re-binds the watcher and regenerates with the new sch
 		resolve: {
 			alias: [
 				{
-					find: "@vacuus/drizzle-validators/refine",
+					find: "drizzle-validators/refine",
 					replacement: resolve(process.cwd(), "src/refine.ts"),
 				},
 			],

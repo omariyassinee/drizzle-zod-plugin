@@ -7,7 +7,7 @@
 //
 // Usage in vite.config.ts:
 //
-//   import { drizzleValidators } from '@vacuus/drizzle-validators'
+//   import { drizzleValidators } from 'drizzle-validators'
 //
 //   export default defineConfig({
 //     plugins: [

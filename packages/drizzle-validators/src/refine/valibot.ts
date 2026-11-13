@@ -1,6 +1,6 @@
-// Subpath entrypoint for `@vacuus/drizzle-validators/refine/valibot`.
+// Subpath entrypoint for `drizzle-validators/refine/valibot`.
 // Isolated from the Zod engine on purpose: importing this module must
-// never pull zod, and `@vacuus/drizzle-validators/refine` must never pull
+// never pull zod, and `drizzle-validators/refine` must never pull
 // valibot. Only valibot-target consumers reach this file.
 export {
 	refineVSchema,

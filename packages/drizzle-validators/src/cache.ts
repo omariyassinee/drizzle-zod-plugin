@@ -38,7 +38,8 @@ function readPluginPackageVersion(): string {
 					readFileSync(joinPath(dir, "package.json"), "utf8"),
 				) as { name?: string; version?: string };
 				if (
-					pkg.name === "@vacuus/drizzle-validators" &&
+					(pkg.name === "drizzle-validators" ||
+						pkg.name === "@vacuus/drizzle-validators") &&
 					typeof pkg.version === "string"
 				) {
 					return pkg.version;
