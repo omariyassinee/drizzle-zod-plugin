@@ -1,15 +1,15 @@
 {
-  "name": "@vacuus/drizzle-validators-monorepo",
+  "name": "drizzle-validators-monorepo",
   "private": true,
   "workspaces": [
     "packages/*",
     "playgrounds/*"
   ],
   "scripts": {
-    "test": "bun run --filter='@vacuus/drizzle-validators' test",
-    "build": "bun run --filter='@vacuus/drizzle-validators' build",
+    "test": "bun run --filter='drizzle-validators' test",
+    "build": "bun run --filter='drizzle-validators' build",
     "typecheck": "bun run --filter='*' typecheck",
-    "typecheck:pkg": "bun run --filter='@vacuus/drizzle-validators' typecheck",
+    "typecheck:pkg": "bun run --filter='drizzle-validators' typecheck",
     "test:playgrounds": "bun run build && bun run --filter='./playgrounds/*' test"
   }
 }

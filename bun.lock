@@ -6,8 +6,8 @@
       "name": "@vacuus/drizzle-validators-monorepo",
     },
     "packages/drizzle-validators": {
-      "name": "@vacuus/drizzle-validators",
-      "version": "0.1.32",
+      "name": "drizzle-validators",
+      "version": "0.1.0",
       "bin": {
         "dv": "./dist/cli.js",
         "drizzle-validators": "./dist/cli.js",
@@ -40,10 +40,10 @@
       ],
     },
     "playgrounds/bun-api": {
-      "name": "@vacuus/playground-bun-api",
+      "name": "playground-bun-api",
       "dependencies": {
-        "@vacuus/drizzle-validators": "workspace:*",
         "drizzle-orm": "1.0.0-rc.5",
+        "drizzle-validators": "workspace:*",
         "zod": "^4.4.3",
       },
       "devDependencies": {
@@ -53,10 +53,10 @@
       },
     },
     "playgrounds/hostile-schema": {
-      "name": "@vacuus/playground-hostile-schema",
+      "name": "playground-hostile-schema",
       "dependencies": {
-        "@vacuus/drizzle-validators": "workspace:*",
         "drizzle-orm": "1.0.0-rc.5",
+        "drizzle-validators": "workspace:*",
         "zod": "^4.4.3",
       },
       "devDependencies": {
@@ -67,10 +67,10 @@
       },
     },
     "playgrounds/polyglot-dual-plugin": {
-      "name": "@vacuus/playground-polyglot-dual-plugin",
+      "name": "playground-polyglot-dual-plugin",
       "dependencies": {
-        "@vacuus/drizzle-validators": "workspace:*",
         "drizzle-orm": "1.0.0-rc.5",
+        "drizzle-validators": "workspace:*",
         "valibot": "^1.0.0",
         "zod": "^4.4.3",
       },
@@ -82,11 +82,11 @@
       },
     },
     "playgrounds/rhf-zod": {
-      "name": "@vacuus/playground-rhf-zod",
+      "name": "playground-rhf-zod",
       "dependencies": {
         "@hookform/resolvers": "^6.0.2",
-        "@vacuus/drizzle-validators": "workspace:*",
         "drizzle-orm": "1.0.0-rc.5",
+        "drizzle-validators": "workspace:*",
         "hono": "^4.0.0",
         "react": "^19.3.1",
         "react-dom": "^19.3.1",
@@ -104,11 +104,11 @@
       },
     },
     "playgrounds/tanstack-form": {
-      "name": "@vacuus/playground-tanstack-form",
+      "name": "playground-tanstack-form",
       "dependencies": {
         "@tanstack/react-form": "^1.33.5",
-        "@vacuus/drizzle-validators": "workspace:*",
         "drizzle-orm": "1.0.0-rc.5",
+        "drizzle-validators": "workspace:*",
         "hono": "^4.0.0",
         "react": "^19.3.1",
         "react-dom": "^19.3.1",
@@ -125,10 +125,10 @@
       },
     },
     "playgrounds/typebox-elysia-rpc": {
-      "name": "@vacuus/playground-typebox-telemetry-rpc",
+      "name": "playground-typebox-telemetry-rpc",
       "dependencies": {
-        "@vacuus/drizzle-validators": "workspace:*",
         "drizzle-orm": "1.0.0-rc.5",
+        "drizzle-validators": "workspace:*",
         "typebox": "1.1.0",
       },
       "devDependencies": {
@@ -138,10 +138,10 @@
       },
     },
     "playgrounds/valibot-edge-worker": {
-      "name": "@vacuus/playground-valibot-edge-worker",
+      "name": "playground-valibot-edge-worker",
       "dependencies": {
-        "@vacuus/drizzle-validators": "workspace:*",
         "drizzle-orm": "1.0.0-rc.5",
+        "drizzle-validators": "workspace:*",
         "valibot": "^1.0.0",
       },
       "devDependencies": {
@@ -152,10 +152,10 @@
       },
     },
     "playgrounds/zod-e2e-forms": {
-      "name": "@vacuus/playground-zod-e2e-forms",
+      "name": "playground-zod-e2e-forms",
       "dependencies": {
-        "@vacuus/drizzle-validators": "workspace:*",
         "drizzle-orm": "1.0.0-rc.5",
+        "drizzle-validators": "workspace:*",
         "hono": "^4.0.0",
         "zod": "^4.4.3",
       },
@@ -278,24 +278,6 @@
 
     "@types/react-dom": ["@types/react-dom@19.3.0", "", { "peerDependencies": { "@types/react": "^19.3.0" } }, "sha512-ZI7bU42mZXXKHn/qNLEw2IrbiINU7X5+vfgdixBHkCNpYWXjKgfQ/P+uyGb5CjOLB9UcnTeg3rylQtV2hym44Q=="],
 
-    "@vacuus/drizzle-validators": ["@vacuus/drizzle-validators@workspace:packages/drizzle-validators"],
-
-    "@vacuus/playground-bun-api": ["@vacuus/playground-bun-api@workspace:playgrounds/bun-api"],
-
-    "@vacuus/playground-hostile-schema": ["@vacuus/playground-hostile-schema@workspace:playgrounds/hostile-schema"],
-
-    "@vacuus/playground-polyglot-dual-plugin": ["@vacuus/playground-polyglot-dual-plugin@workspace:playgrounds/polyglot-dual-plugin"],
-
-    "@vacuus/playground-rhf-zod": ["@vacuus/playground-rhf-zod@workspace:playgrounds/rhf-zod"],
-
-    "@vacuus/playground-tanstack-form": ["@vacuus/playground-tanstack-form@workspace:playgrounds/tanstack-form"],
-
-    "@vacuus/playground-typebox-telemetry-rpc": ["@vacuus/playground-typebox-telemetry-rpc@workspace:playgrounds/typebox-elysia-rpc"],
-
-    "@vacuus/playground-valibot-edge-worker": ["@vacuus/playground-valibot-edge-worker@workspace:playgrounds/valibot-edge-worker"],
-
-    "@vacuus/playground-zod-e2e-forms": ["@vacuus/playground-zod-e2e-forms@workspace:playgrounds/zod-e2e-forms"],
-
     "@vitejs/plugin-react": ["@vitejs/plugin-react@6.1.2", "", { "dependencies": { "@rolldown/pluginutils": "^1.0.1" }, "peerDependencies": { "@rolldown/plugin-babel": "^0.1.7 || ^0.2.0", "babel-plugin-react-compiler": "^1.0.0", "oxc-transform-react": "^0.152.0", "vite": "^8.0.0" }, "optionalPeers": ["@rolldown/plugin-babel", "babel-plugin-react-compiler", "oxc-transform-react"] }, "sha512-fhJNGUdscQa4HkI0xFxwonWyhnVReCPDbXI7FH7jmzpnVCrFQI7PRrhWecO263610vOrs9tr2Y4xcf8uAdFxbw=="],
 
     "bun-types": ["bun-types@1.4.4", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-yjrJh5oGX7mMPKGd19YXyIjmEuj4G4zNC30bs7PM9Az7NQ3ndF3j6hbeRdvJTRQEhJ/FYQwW0a2moweEi2hMxQ=="],
@@ -305,6 +287,8 @@
     "detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
 
     "drizzle-orm": ["drizzle-orm@1.0.0-rc.5", "", { "peerDependencies": { "@aws-sdk/client-rds-data": ">=3", "@aws/aurora-dsql-node-postgres-connector": ">=0.1.9", "@aws/aurora-dsql-postgresjs-connector": ">=0.3.0", "@cloudflare/workers-types": ">=4", "@drizzle-team/minipg": ">=0.4.2", "@effect/sql-d1": ">=4.0.0", "@effect/sql-libsql": ">=4.0.0", "@effect/sql-mysql2": ">=4.0.0", "@effect/sql-pg": ">=4.0.0", "@effect/sql-pglite": ">=4.0.0", "@effect/sql-sqlite-bun": ">=4.0.0", "@effect/sql-sqlite-do": ">=4.0.0", "@effect/sql-sqlite-node": ">=4.0.0", "@effect/sql-sqlite-wasm": ">=4.0.0", "@electric-sql/pglite": ">=0.2.0", "@libsql/client": ">=0.10.0", "@libsql/client-wasm": ">=0.10.0", "@neondatabase/serverless": ">=0.10.0", "@op-engineering/op-sqlite": ">=17", "@opentelemetry/api": "^1.4.1", "@planetscale/database": ">=1.13", "@sinclair/typebox": ">=0.34.8", "@sqlitecloud/drivers": ">=1.0.653", "@tidbcloud/serverless": "*", "@tursodatabase/database": ">=0.7.1", "@tursodatabase/database-common": ">=0.7.1", "@tursodatabase/database-wasm": ">=0.7.1", "@tursodatabase/serverless": ">=1.4.0", "@tursodatabase/sync": ">=0.7.1", "@types/better-sqlite3": "*", "@types/mssql": "^9.1.4", "@types/pg": "*", "@types/sql.js": "*", "@upstash/redis": ">=1.34.7", "@vercel/postgres": ">=0.8.0", "@xata.io/client": "*", "arktype": ">=2.0.0", "better-sqlite3": ">=9.3.0", "bun-types": "*", "effect": ">=4.0.0", "expo-sqlite": ">=14.0.0", "mssql": "^11.0.1", "mysql2": ">=2", "pg": ">=8", "postgres": ">=3", "sql.js": ">=1", "sqlite3": ">=5", "typebox": ">=1.2.0", "valibot": ">=1.0.0-beta.7", "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["@aws-sdk/client-rds-data", "@aws/aurora-dsql-node-postgres-connector", "@aws/aurora-dsql-postgresjs-connector", "@cloudflare/workers-types", "@drizzle-team/minipg", "@effect/sql-d1", "@effect/sql-libsql", "@effect/sql-mysql2", "@effect/sql-pg", "@effect/sql-pglite", "@effect/sql-sqlite-bun", "@effect/sql-sqlite-do", "@effect/sql-sqlite-node", "@effect/sql-sqlite-wasm", "@electric-sql/pglite", "@libsql/client", "@libsql/client-wasm", "@neondatabase/serverless", "@op-engineering/op-sqlite", "@opentelemetry/api", "@planetscale/database", "@sinclair/typebox", "@sqlitecloud/drivers", "@tidbcloud/serverless", "@tursodatabase/database", "@tursodatabase/database-common", "@tursodatabase/database-wasm", "@tursodatabase/serverless", "@tursodatabase/sync", "@types/better-sqlite3", "@types/mssql", "@types/pg", "@types/sql.js", "@upstash/redis", "@vercel/postgres", "@xata.io/client", "arktype", "better-sqlite3", "bun-types", "effect", "expo-sqlite", "mssql", "mysql2", "pg", "postgres", "sql.js", "sqlite3", "typebox", "valibot", "zod"] }, "sha512-7BMYTsAZbQ9DcQCtLG4G202Hq6nc/e8o1EBKN6nBweRI8EGPFe/VdyvWQCsU9fuZSiRjNpELolUSi//JFBq+lw=="],
+
+    "drizzle-validators": ["drizzle-validators@workspace:packages/drizzle-validators"],
 
     "drizzle-zod": ["drizzle-zod@0.8.3", "", { "peerDependencies": { "drizzle-orm": ">=0.36.0", "zod": "^3.25.0 || ^4.0.0" } }, "sha512-66yVOuvGhKJnTdiqj1/Xaaz9/qzOdRJADpDa68enqS6g3t0kpNkwNYjUuaeXgZfO/UWuIM9HIhSlJ6C5ZraMww=="],
 
@@ -345,6 +329,22 @@
     "picocolors": ["picocolors@1.1.1", "", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
 
     "picomatch": ["picomatch@4.0.7", "", {}, "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA=="],
+
+    "playground-bun-api": ["playground-bun-api@workspace:playgrounds/bun-api"],
+
+    "playground-hostile-schema": ["playground-hostile-schema@workspace:playgrounds/hostile-schema"],
+
+    "playground-polyglot-dual-plugin": ["playground-polyglot-dual-plugin@workspace:playgrounds/polyglot-dual-plugin"],
+
+    "playground-rhf-zod": ["playground-rhf-zod@workspace:playgrounds/rhf-zod"],
+
+    "playground-tanstack-form": ["playground-tanstack-form@workspace:playgrounds/tanstack-form"],
+
+    "playground-typebox-telemetry-rpc": ["playground-typebox-telemetry-rpc@workspace:playgrounds/typebox-elysia-rpc"],
+
+    "playground-valibot-edge-worker": ["playground-valibot-edge-worker@workspace:playgrounds/valibot-edge-worker"],
+
+    "playground-zod-e2e-forms": ["playground-zod-e2e-forms@workspace:playgrounds/zod-e2e-forms"],
 
     "postcss": ["postcss@8.5.31", "", { "dependencies": { "nanoid": "^3.3.20", "picocolors": "^1.1.1", "source-map-js": "^1.2.2" } }, "sha512-YUbWYCgErwnMAVkjUnYa+KlMBzGpHwiIt/DE7f0G33AuX2LH9UcTk6KgWxd3zRU+pN3u/C+Xl3EnMLM4Hea7Sg=="],
 
