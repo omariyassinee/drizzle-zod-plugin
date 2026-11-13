@@ -1,4 +1,4 @@
-# @vacuus/drizzle-validators
+# drizzle-validators
 
 Vite plugin + CLI that generate zero-overhead, virtual validation schemas (Zod, Valibot, or TypeBox) directly from Drizzle ORM tables at dev and build time.
 
@@ -11,9 +11,9 @@ Importing `drizzle-zod` or `drizzle-orm` in client-side code bloats JavaScript b
 ## 📦 Installation
 
 ```bash
-npm install -D @vacuus/drizzle-validators
+npm install -D drizzle-validators
 # or
-bun add -d @vacuus/drizzle-validators
+bun add -d drizzle-validators
 ```
 
 ## ⚙️ Quick Setup
@@ -23,7 +23,7 @@ target (required)**; the second is an optional options object:
 
 ```ts
 import { defineConfig } from 'vite';
-import { drizzleValidators } from '@vacuus/drizzle-validators';
+import { drizzleValidators } from 'drizzle-validators';
 
 export default defineConfig({
   plugins: [
@@ -63,7 +63,7 @@ const newUser = insertSchema.parse(formData);
 
 Drizzle-generated schemas reflect raw database column constraints. When building forms, UI inputs, or API boundaries, you often need **custom error messages**, **additional validation rules**, or **type extensions** without losing type safety or untouched fields.
 
-The `refineZSchema` helper is exported directly by your virtual modules (or from `@vacuus/drizzle-validators/refine` for standalone files):
+The `refineZSchema` helper is exported directly by your virtual modules (or from `drizzle-validators/refine` for standalone files):
 
 ```ts
 import * as z from "zod";
@@ -98,7 +98,7 @@ export const insertUserSchema = refineZSchema(insertSchema, (fields) => ({
 
 ### Valibot (`refineVSchema`)
 
-Valibot-target virtual modules export `refineVSchema` (from `@vacuus/drizzle-validators/refine/valibot` for standalone files) with the same API contract — `.as()`, `.pipe()`, `.setError()`, `.required()`, `.nonnullable()`, and the declarative `errorMap`:
+Valibot-target virtual modules export `refineVSchema` (from `drizzle-validators/refine/valibot` for standalone files) with the same API contract — `.as()`, `.pipe()`, `.setError()`, `.required()`, `.nonnullable()`, and the declarative `errorMap`:
 
 ```ts
 import * as v from "valibot";

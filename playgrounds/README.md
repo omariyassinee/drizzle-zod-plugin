@@ -1,6 +1,6 @@
 # Playgrounds
 
-Real-world test applications for `@vacuus/drizzle-validators` — one workspace
+Real-world test applications for `drizzle-validators` — one workspace
 per scenario, added as needed (e.g. forms + e2e validation, non-Vite bundlers,
 framework integrations).
 

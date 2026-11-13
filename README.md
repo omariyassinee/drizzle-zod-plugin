@@ -1,10 +1,10 @@
-# @vacuus/drizzle-validators — monorepo
+# drizzle-validators — monorepo
 
 Bun workspaces monorepo with two packages:
 
 | Workspace | Path | Description |
 | :--- | :--- | :--- |
-| `@vacuus/drizzle-validators` | [`packages/drizzle-validators`](./packages/drizzle-validators) | The published package: Vite plugin + CLI that generate virtual validation schemas (Zod, Valibot, TypeBox) from Drizzle tables. |
+| `drizzle-validators` | [`packages/drizzle-validators`](./packages/drizzle-validators) | The published package: Vite plugin + CLI that generate virtual validation schemas (Zod, Valibot, TypeBox) from Drizzle tables. |
 | Playgrounds | [`playgrounds/`](./playgrounds) | Real-world test applications, one workspace per scenario (intentionally empty for now). |
 
 ## Development
