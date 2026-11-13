@@ -1,5 +1,5 @@
 {
-	"name": "@vacuus/playground-bun-api",
+	"name": "playground-bun-api",
 	"private": true,
 	"type": "module",
 	"scripts": {
@@ -10,9 +10,9 @@
 		"test": "bun run generate && bun test"
 	},
 	"dependencies": {
-		"@vacuus/drizzle-validators": "workspace:*",
 		"drizzle-orm": "1.0.0-rc.5",
-		"zod": "^4.4.3"
+		"zod": "^4.4.3",
+		"drizzle-validators": "workspace:*"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.3.14",

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { build } from "vite";
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { drizzleValidators } from "@vacuus/drizzle-validators";
+import { drizzleValidators } from "drizzle-validators";
 
 // PG2: valibot-edge-worker — the real-project pipeline the unit suite
 // cannot cover: CLI generation -> no-regen vite build (default) -> bundle that

@@ -3,7 +3,7 @@ import { rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as valibot from "valibot";
-import { drizzleValidators } from "@vacuus/drizzle-validators";
+import { drizzleValidators } from "drizzle-validators";
 
 // Differential matrix (audit #4): the same DDL must produce semantically
 // identical validators on zod and valibot. Every boundary payload is

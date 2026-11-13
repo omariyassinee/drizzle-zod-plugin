@@ -3,7 +3,7 @@ import { build } from "vite";
 import { createServer } from "vite";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { drizzleValidators } from "@vacuus/drizzle-validators";
+import { drizzleValidators } from "drizzle-validators";
 
 // PG4: polyglot-dual-plugin — two plugin instances (zod + valibot, custom
 // moduleIds) in one project: cache isolation, emitRootDts, dynamic-import
@@ -41,7 +41,10 @@ test("dual instances generate isolated outputs + per-moduleId d.ts", async () =>
 	expect(valibotIndex).toContain("import * as v from 'valibot'");
 
 	// emitRootDts: one declaration file per instance, each naming ITS module id
-	const zodDts = readFileSync(join(GEN_ZOD, "virtual-validators-zod.d.ts"), "utf-8");
+	const zodDts = readFileSync(
+		join(GEN_ZOD, "virtual-validators-zod.d.ts"),
+		"utf-8",
+	);
 	expect(zodDts).toContain("declare module 'virtual:validators-zod'");
 	const valibotDts = readFileSync(
 		join(GEN_VALIBOT, "virtual-validators-valibot.d.ts"),
@@ -50,19 +53,29 @@ test("dual instances generate isolated outputs + per-moduleId d.ts", async () =>
 	expect(valibotDts).toContain("declare module 'virtual:validators-valibot'");
 
 	// hidden @types shims: one per moduleId (the collision fix)
-	expect(existsSync(join(ROOT, "node_modules/@types/virtual-validators-zod/index.d.ts"))).toBe(true);
-	expect(existsSync(join(ROOT, "node_modules/@types/virtual-validators-valibot/index.d.ts"))).toBe(true);
+	expect(
+		existsSync(
+			join(ROOT, "node_modules/@types/virtual-validators-zod/index.d.ts"),
+		),
+	).toBe(true);
+	expect(
+		existsSync(
+			join(ROOT, "node_modules/@types/virtual-validators-valibot/index.d.ts"),
+		),
+	).toBe(true);
 	// dynamic import boundary still captured (P2-14): billing tables generated
 	expect(existsSync(join(GEN_ZOD, "invoices.ts"))).toBe(true);
 });
 
 test("disk cache keeps one entry per target+moduleId", () => {
 	const cacheDir = join(ROOT, "node_modules/.cache/drizzle-validators");
-	const entries = Array.from(new Bun.Glob("*.json").scanSync({ cwd: cacheDir }));
+	const entries = Array.from(
+		new Bun.Glob("*.json").scanSync({ cwd: cacheDir }),
+	);
 	expect(entries.length).toBe(2);
 	// envelopes carry distinct targets
-	const targets = entries.map((e) =>
-		JSON.parse(readFileSync(join(cacheDir, e), "utf-8")).data.target,
+	const targets = entries.map(
+		(e) => JSON.parse(readFileSync(join(cacheDir, e), "utf-8")).data.target,
 	);
 	expect(targets.sort()).toEqual(["valibot", "zod"]);
 });
@@ -125,9 +138,13 @@ test("HMR: comment-only change suppresses full-reload; real change triggers it",
 
 	const reloads: unknown[] = [];
 	const originalSend = server.ws.send.bind(server.ws);
-	(server.ws as any).send = (...args: unknown[]) => {
+	server.ws.send = (...args: unknown[]) => {
 		const payload = args[0] as { type?: string } | undefined;
-		if (payload && typeof payload === "object" && payload.type === "full-reload") {
+		if (
+			payload &&
+			typeof payload === "object" &&
+			payload.type === "full-reload"
+		) {
 			reloads.push(payload);
 		}
 		return originalSend(...(args as [any]));

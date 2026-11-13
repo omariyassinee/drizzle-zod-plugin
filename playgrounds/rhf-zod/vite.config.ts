@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { drizzleValidators } from "@vacuus/drizzle-validators";
+import { drizzleValidators } from "drizzle-validators";
 
 // Zero-config internal mode: schema auto-detected from drizzle.config.ts,
 // generated files stay hidden in node_modules, types from the @types shim.

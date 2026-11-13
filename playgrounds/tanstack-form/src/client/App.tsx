@@ -1,14 +1,11 @@
 import { useForm } from "@tanstack/react-form";
 import { useState } from "react";
-import {
-  createProjectSchema,
-  type CreateProjectValues,
-} from "../shared/validators";
+import { createProjectSchema } from "../shared/validators";
 import {
   predictedKeysObject,
   errorsOf,
   type FieldErrorRecord,
-} from "@vacuus/drizzle-validators/predictions";
+} from "drizzle-validators/predictions";
 
 export function App() {
   const [serverResult, setServerResult] = useState<string>("");

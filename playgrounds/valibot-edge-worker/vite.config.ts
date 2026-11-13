@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
-import { drizzleValidators } from "@vacuus/drizzle-validators";
+import { drizzleValidators } from "drizzle-validators";
 
 export default defineConfig({
 	plugins: [

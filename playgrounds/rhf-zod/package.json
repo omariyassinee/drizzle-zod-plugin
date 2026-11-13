@@ -1,5 +1,5 @@
 {
-	"name": "@vacuus/playground-rhf-zod",
+	"name": "playground-rhf-zod",
 	"private": true,
 	"type": "module",
 	"scripts": {
@@ -10,13 +10,13 @@
 	},
 	"dependencies": {
 		"@hookform/resolvers": "^6.0.2",
-		"@vacuus/drizzle-validators": "workspace:*",
 		"drizzle-orm": "1.0.0-rc.5",
 		"hono": "^4.0.0",
 		"react": "^19.3.1",
 		"react-dom": "^19.3.1",
 		"react-hook-form": "^7.91.0",
-		"zod": "^4.4.3"
+		"zod": "^4.4.3",
+		"drizzle-validators": "workspace:*"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.3.14",

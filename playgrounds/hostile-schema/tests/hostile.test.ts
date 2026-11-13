@@ -9,7 +9,7 @@ import {
 	statSync,
 } from "node:fs";
 
-import { drizzleValidators } from "@vacuus/drizzle-validators";
+import { drizzleValidators } from "drizzle-validators";
 import { join } from "node:path";
 
 import type { Plugin } from "vite";

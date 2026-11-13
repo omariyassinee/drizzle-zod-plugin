@@ -1,5 +1,5 @@
 {
-	"name": "@vacuus/playground-typebox-telemetry-rpc",
+	"name": "playground-typebox-telemetry-rpc",
 	"private": true,
 	"type": "module",
 	"scripts": {
@@ -8,9 +8,9 @@
 		"test": "bun test"
 	},
 	"dependencies": {
-		"@vacuus/drizzle-validators": "workspace:*",
 		"drizzle-orm": "1.0.0-rc.5",
-		"typebox": "1.1.0"
+		"typebox": "1.1.0",
+		"drizzle-validators": "workspace:*"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.3.14",
